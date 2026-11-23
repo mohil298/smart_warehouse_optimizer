@@ -1,7 +1,7 @@
 import streamlit as st
 from database import (
     init_db, get_products, add_product, update_stock, delete_product,
-    create_order, get_orders, update_order_status, dashboard_stats,
+    create_order, create_multi_item_order, get_orders, update_order_status, update_order_group_status, dashboard_stats,
     save_delivery_assignments, clear_delivery_assignments, analytics_summary
 )
 from algorithms import (dijkstra, prioritize_orders, greedy_pick_plan,
@@ -347,48 +347,121 @@ elif page == "Warehouse Layout":
 
 elif page == "Orders":
     st.subheader("Customer order management")
+    st.caption("Build a shopping cart with multiple products, then place everything as one customer order.")
     products = get_products()
     if not products:
         st.info("Add inventory before creating an order.")
     else:
-        with st.form("new_order_form", clear_on_submit=True):
-            customer = st.text_input("Customer name")
-            destination = st.selectbox("Delivery destination", DESTINATIONS)
-            product_map = {f'{p["name"]} | {p["sku"]} | stock: {p["quantity"]}': p for p in products}
-            product_label = st.selectbox("Product", list(product_map))
-            qty = st.number_input("Quantity", min_value=1, value=1, step=1)
-            priority_label = st.select_slider("Order priority", options=["Urgent","High","Normal","Low"], value="Normal")
-            priority = {"Urgent":1,"High":2,"Normal":3,"Low":4}[priority_label]
-            submit = st.form_submit_button("Place order")
-            if submit:
-                try:
-                    if not customer.strip():
-                        st.error("Enter a customer name.")
+        product_by_id = {int(p["id"]): p for p in products}
+        st.session_state.setdefault("order_cart", {})
+        cart = st.session_state["order_cart"]
+
+        with st.container(border=True):
+            st.markdown("### 1. Customer and delivery details")
+            customer_col, destination_col, priority_col = st.columns([1.4, 1, 1])
+            customer = customer_col.text_input("Customer name", key="multi_order_customer", placeholder="Enter customer name")
+            destination = destination_col.selectbox("Delivery destination", DESTINATIONS, key="multi_order_destination")
+            priority_label = priority_col.selectbox("Order priority", ["Urgent", "High", "Normal", "Low"], index=2, key="multi_order_priority")
+            priority = {"Urgent": 1, "High": 2, "Normal": 3, "Low": 4}[priority_label]
+
+        with st.container(border=True):
+            st.markdown("### 2. Add products to cart")
+            available_products = [p for p in products if int(p["quantity"]) > 0]
+            if available_products:
+                product_options = {
+                    f'{p["name"]} · {p["sku"]} · {p["quantity"]} available': int(p["id"])
+                    for p in available_products
+                }
+                add_col, qty_col, action_col = st.columns([2.2, 0.8, 1])
+                selected_label = add_col.selectbox("Choose product", list(product_options), key="cart_product_choice")
+                selected_id = product_options[selected_label]
+                selected_product = product_by_id[selected_id]
+                add_qty = qty_col.number_input("Quantity", min_value=1, max_value=max(1, int(selected_product["quantity"])), value=1, step=1, key="cart_add_quantity")
+                if action_col.button("＋ Add to cart", use_container_width=True, type="primary"):
+                    new_total = int(cart.get(selected_id, 0)) + int(add_qty)
+                    if new_total > int(selected_product["quantity"]):
+                        st.error(f'Only {selected_product["quantity"]} unit(s) of {selected_product["name"]} are available in stock.')
                     else:
-                        create_order(customer, destination, product_map[product_label]["id"], int(qty), priority)
-                        st.success("Order placed and stock reserved.")
+                        cart[selected_id] = new_total
+                        st.session_state["order_cart"] = cart
                         st.rerun()
-                except Exception as e:
-                    st.error(str(e))
+            else:
+                st.warning("No products currently have available stock.")
+
+            st.markdown("### 3. Review your cart")
+            if cart:
+                total_units = 0
+                for product_id in list(cart.keys()):
+                    product = product_by_id.get(int(product_id))
+                    if product is None:
+                        cart.pop(product_id, None)
+                        continue
+                    line, qty_box, remove_box = st.columns([2.2, 0.8, 0.8])
+                    line.markdown(f'**{product["name"]}**  \n<small>{product["sku"]} · {product["category"]} · Stock: {product["quantity"]}</small>', unsafe_allow_html=True)
+                    max_qty = max(1, int(product["quantity"]))
+                    current_qty = min(int(cart[product_id]), max_qty)
+                    updated_qty = qty_box.number_input("Units", min_value=1, max_value=max_qty, value=current_qty, step=1, key=f"cart_line_qty_{product_id}")
+                    cart[product_id] = int(updated_qty)
+                    total_units += int(updated_qty)
+                    if remove_box.button("Remove", key=f"cart_remove_{product_id}", use_container_width=True):
+                        cart.pop(product_id, None)
+                        st.session_state["order_cart"] = cart
+                        st.rerun()
+                st.session_state["order_cart"] = cart
+                st.divider()
+                total_products = len(cart)
+                metric_a, metric_b = st.columns(2)
+                metric_a.metric("Different products", total_products)
+                metric_b.metric("Total units", total_units)
+                place_col, clear_col = st.columns([2, 1])
+                if place_col.button("Place complete order", type="primary", use_container_width=True, disabled=not bool(cart)):
+                    try:
+                        if not customer.strip():
+                            st.error("Enter a customer name before placing the order.")
+                        else:
+                            group_id = create_multi_item_order(
+                                customer, destination,
+                                [(int(pid), int(qty)) for pid, qty in cart.items()],
+                                priority
+                            )
+                            st.session_state["order_cart"] = {}
+                            st.success(f"Order {group_id} placed successfully with {total_products} product line(s) and {total_units} total unit(s). Stock has been reserved.")
+                            st.rerun()
+                    except Exception as exc:
+                        st.error(str(exc))
+                if clear_col.button("Clear cart", use_container_width=True):
+                    st.session_state["order_cart"] = {}
+                    st.rerun()
+            else:
+                st.info("Your cart is empty. Add one or more products above.")
+
     st.divider()
     orders = get_orders()
-    st.markdown("**Orders (urgent orders appear first)**")
+    st.markdown("**Order items (urgent orders appear first)**")
     if orders:
         st.dataframe([{
-            "Order": f'ORD-{o["id"]:04d}', "Customer": o["customer"], "Destination": o["destination"],
+            "Order ID": o.get("order_group_id") or f'ORD-{o["id"]:04d}',
+            "Line ID": f'#{o["id"]}', "Customer": o["customer"], "Destination": o["destination"],
             "Product": o["product_name"], "Qty": o["quantity"],
             "Priority": {1:"Urgent",2:"High",3:"Normal",4:"Low"}.get(o["priority"], o["priority"]),
             "Status": o["status"], "Vehicle": o.get("assigned_vehicle") or "Not assigned",
             "Route (km)": o.get("route_km") if o.get("route_km") is not None else "—"
         } for o in orders], use_container_width=True, hide_index=True)
-        pending = [o for o in orders if o["status"] in ("Pending","Processing")]
+        pending = [o for o in orders if o["status"] in ("Pending", "Processing", "Dispatched")]
         if pending:
-            order_map = {f'Order #{o["id"]} — {o["customer"]} — {o["status"]}': o for o in pending}
-            chosen = st.selectbox("Select order to update", list(order_map))
-            new_status = st.selectbox("New status", ["Processing","Dispatched","Delivered","Pending"])
-            if st.button("Update order status"):
-                update_order_status(order_map[chosen]["id"], new_status)
-                st.success("Order status updated.")
+            order_groups = {}
+            for order in pending:
+                group_id = order.get("order_group_id") or f'ORD-{order["id"]:06d}'
+                order_groups.setdefault(group_id, []).append(order)
+            order_labels = {
+                f'{group_id} — {rows[0]["customer"]} — {len(rows)} product line(s) — {rows[0]["status"]}': group_id
+                for group_id, rows in order_groups.items()
+            }
+            chosen = st.selectbox("Select complete customer order to update", list(order_labels))
+            new_status = st.selectbox("New status", ["Processing", "Dispatched", "Delivered", "Pending"])
+            if st.button("Update complete order status"):
+                update_order_group_status(order_labels[chosen], new_status)
+                st.success("All product lines in this customer order were updated.")
                 st.rerun()
     else:
         st.info("No orders yet.")
@@ -417,7 +490,7 @@ elif page == "Smart Delivery Assignment":
         if planned:
             save_delivery_assignments({name: data["orders"] for name, data in planned.items()})
             st.session_state["last_assignment_unassigned"] = unassigned
-            st.success(f"Successfully assigned {sum(len(v['orders']) for v in planned.values())} order(s) across {len(planned)} vehicle(s).")
+            st.success(f"Successfully assigned {sum(len(v['orders']) for v in planned.values())} complete customer order(s) across {len(planned)} vehicle(s).")
             st.rerun()
         else:
             st.warning("No orders could be assigned. Check whether unassigned orders exist and vehicle capacity is sufficient.")
@@ -433,10 +506,11 @@ elif page == "Smart Delivery Assignment":
             by_vehicle.setdefault(order["assigned_vehicle"], []).append(order)
         for vehicle, vehicle_orders in sorted(by_vehicle.items()):
             total_load = sum(int(o["quantity"]) for o in vehicle_orders)
-            route_total = sum(float(o["route_km"] or 0) for o in vehicle_orders)
-            with st.expander(f"{vehicle}  ·  {len(vehicle_orders)} order(s)  ·  {total_load} capacity units  ·  {route_total:.1f} route-km", expanded=True):
+            route_total = sum(float(o["route_km"] or 0) for o in {o.get("order_group_id") or o["id"]: o for o in vehicle_orders}.values())
+            unique_orders = len({o.get("order_group_id") or o["id"] for o in vehicle_orders})
+            with st.expander(f"{vehicle}  ·  {unique_orders} customer order(s)  ·  {total_load} capacity units  ·  {route_total:.1f} route-km", expanded=True):
                 st.dataframe([{
-                    "Order": f'ORD-{o["id"]:04d}', "Customer": o["customer"], "Destination": o["destination"],
+                    "Order": o.get("order_group_id") or f'ORD-{o["id"]:04d}', "Customer": o["customer"], "Destination": o["destination"],
                     "Product": o["product_name"], "Units": o["quantity"],
                     "Priority": {1:"Urgent",2:"High",3:"Normal",4:"Low"}.get(o["priority"], o["priority"]),
                     "Route estimate (km)": o["route_km"]
@@ -447,7 +521,7 @@ elif page == "Smart Delivery Assignment":
     unassigned = st.session_state.get("last_assignment_unassigned", [])
     if unassigned:
         st.markdown("### Orders not assigned")
-        st.dataframe([{"Order ID": o["id"], "Customer": o["customer"], "Units": o["quantity"], "Reason": o["reason"]} for o in unassigned], use_container_width=True, hide_index=True)
+        st.dataframe([{"Order ID": o.get("order_group_id") or o["id"], "Customer": o["customer"], "Units": o["quantity"], "Reason": o["reason"]} for o in unassigned], use_container_width=True, hide_index=True)
     with st.expander("How the assignment algorithm works"):
         st.markdown("""
         1. Ignore delivered orders and orders that already have a vehicle.

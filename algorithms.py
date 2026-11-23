@@ -65,35 +65,53 @@ def greedy_vehicle_assignment(deliveries, vehicle_capacity):
 
 
 def smart_delivery_assignment(orders, vehicle_count, capacity_units, route_distance_fn):
-    """Priority-aware First-Fit Decreasing assignment with route estimates.
+    """Assign complete customer orders (all product lines together) to vehicles.
 
-    Each ordered product quantity is treated as one capacity unit because the
-    prototype does not yet store physical package dimensions or weights.
+    Product rows sharing order_group_id are combined into one delivery so a
+    multi-item basket is never split across vehicles. Capacity is total units.
     """
-    eligible = [o for o in orders if o.get("status") != "Delivered" and not o.get("assigned_vehicle")]
-    # Priority first, then larger loads first, then oldest/smallest order ID.
-    eligible.sort(key=lambda o: (int(o["priority"]), -int(o["quantity"]), int(o["id"])))
+    eligible_rows = [o for o in orders if o.get("status") != "Delivered" and not o.get("assigned_vehicle")]
+    grouped = {}
+    for order in eligible_rows:
+        group_key = order.get("order_group_id") or f"LEGACY-{order['id']}"
+        if group_key not in grouped:
+            grouped[group_key] = {
+                **order,
+                "order_group_id": group_key,
+                "line_ids": [],
+                "quantity": 0,
+                "product_name": order.get("product_name", ""),
+            }
+        delivery = grouped[group_key]
+        delivery["line_ids"].append(int(order["id"]))
+        delivery["quantity"] += int(order["quantity"])
+        if order.get("product_name") and order["product_name"] not in delivery["product_name"].split(", "):
+            delivery["product_name"] += ", " + order["product_name"]
+        delivery["id"] = min(int(delivery["id"]), int(order["id"]))
+
+    deliveries = list(grouped.values())
+    deliveries.sort(key=lambda o: (int(o["priority"]), -int(o["quantity"]), int(o["id"])))
     vehicles = [{"vehicle": f"V-{i+1:02d}", "used": 0, "orders": [], "destinations": set(), "route_km": 0.0}
                 for i in range(max(1, int(vehicle_count)))]
     unassigned = []
-    for order in eligible:
-        load = int(order["quantity"])
+    for delivery in deliveries:
+        load = int(delivery["quantity"])
         if load > capacity_units:
-            unassigned.append({**order, "reason": f"Order load ({load}) exceeds vehicle capacity ({capacity_units})."})
+            unassigned.append({**delivery, "reason": f"Complete order load ({load}) exceeds vehicle capacity ({capacity_units})."})
             continue
         target = next((v for v in vehicles if v["used"] + load <= capacity_units), None)
         if target is None:
-            unassigned.append({**order, "reason": "No remaining vehicle capacity."})
+            unassigned.append({**delivery, "reason": "No remaining vehicle capacity for this complete order."})
             continue
-        distance = route_distance_fn(order["destination"])
-        enriched = {**order, "route_km": distance}
+        distance = route_distance_fn(delivery["destination"])
+        enriched = {**delivery, "route_km": distance}
         target["orders"].append(enriched)
         target["used"] += load
-        target["destinations"].add(order["destination"])
+        target["destinations"].add(delivery["destination"])
     result = {}
     for vehicle in vehicles:
         if vehicle["orders"]:
-            # A simple conservative estimate: sum of each assigned order's warehouse-to-zone route.
             vehicle["route_km"] = sum(o["route_km"] for o in vehicle["orders"])
             result[vehicle["vehicle"]] = vehicle
     return result, unassigned
+
