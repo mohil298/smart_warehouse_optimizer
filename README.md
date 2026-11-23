@@ -5,8 +5,7 @@ M.Tech DSA project built with Python 3.11, Streamlit and SQLite.
 ## Features
 - Inventory: add, search, update stock and delete products
 - Interactive warehouse layout: browse aisle/shelf cards, inspect shelf contents and update stock from the layout
-- Multi-item customer orders: add several products to a cart, adjust quantities, then place them together under one order ID; stock is validated and reserved atomically
-- Order lifecycle: update the status of the complete customer order so all product lines stay in sync
+- Orders: place orders, reserve stock and update order status
 - Priority scheduling: urgent orders are shown first using a heap-based priority queue
 - Delivery routing: step-by-step Dijkstra visualizer with a weighted network diagram, current edge, visited nodes, tentative distances, and final shortest route
 - DSA demonstration: priority heap, greedy shelf picking and First-Fit Decreasing vehicle allocation
@@ -60,7 +59,7 @@ Do not activate the environment. Use the `.venv\Scripts\python.exe` commands abo
 This project does not require Pandas, NumPy, or NetworkX. If a package DLL is blocked by your Windows policy, share the exact error with your system administrator. Install only the Streamlit dependency listed in `requirements.txt`.
 
 ## Smart Delivery Assignment
-Open **Smart Delivery Assignment**, choose the available vehicle count and capacity, then generate a plan. The scheduler prioritizes urgent orders, then larger orders, and uses a First-Fit capacity heuristic to allocate complete customer orders to vehicles. All product lines in a multi-item cart stay together on the same vehicle. Dijkstra calculates a warehouse-to-destination route estimate for each assigned order. Vehicle, route estimate and assignment timestamp are saved in SQLite and shown in the Orders and Analytics pages. Delivered orders are not cleared when active assignments are reset.
+Open **Smart Delivery Assignment**, choose the available vehicle count and capacity, then generate a plan. The scheduler prioritizes urgent orders, then larger orders, and uses a First-Fit capacity heuristic to allocate orders to vehicles. Dijkstra calculates a warehouse-to-destination route estimate for each assigned order. Vehicle, route estimate and assignment timestamp are saved in SQLite and shown in the Orders and Analytics pages. Delivered orders are not cleared when active assignments are reset.
 
 **Capacity assumption:** until package weight/dimensions are added to the inventory schema, one unit means one ordered product unit. It is not kilograms. The route network is illustrative and does not include live traffic or multi-stop sequencing.
 
@@ -68,17 +67,3 @@ Open **Smart Delivery Assignment**, choose the available vehicle count and capac
 The **Advanced Analytics** workspace includes order status and priority charts, daily order creation trend, category stock chart, low-stock/reorder table, destination demand and vehicle workload/dispatch coverage. Aggregates are queried directly from SQLite, so Pandas and NumPy are not required. The app now uses a responsive wide layout, a dark navigation sidebar, dashboard-style metric cards, tabs and cleaner data tables.
 
 The database performs an additive migration for vehicle assignment fields when the app starts. Existing `warehouse.db` inventory and order records are preserved.
-
-
-## Multi-item customer checkout
-
-On the **Orders** page, enter customer details, add multiple products to the cart, adjust each line quantity, and place the complete order once. Every product line shares one customer order ID. The database checks stock for every cart line before reserving any stock; if one item is unavailable, the complete transaction is rejected and no inventory is deducted. Order status updates and smart vehicle assignment apply to all lines in the customer order. Analytics count distinct customer orders rather than counting each product line as a separate order.
-
-
-## Modern interface theme
-
-The project includes `.streamlit/config.toml`, which sets Streamlit to a consistent
-light theme (light workspace, white panels, dark readable text, and blue accents).
-The app also includes responsive styling for the navy sidebar, dashboard banner,
-metric cards, tabs, forms, and tables. Keep the `.streamlit` folder when copying
-or updating the project; it is part of the interface configuration.

@@ -1,7 +1,7 @@
 import streamlit as st
 from database import (
     init_db, get_products, add_product, update_stock, delete_product,
-    create_order, create_multi_item_order, get_orders, update_order_status, update_order_group_status, dashboard_stats,
+    create_order, get_orders, update_order_status, dashboard_stats,
     save_delivery_assignments, clear_delivery_assignments, analytics_summary
 )
 from algorithms import (dijkstra, prioritize_orders, greedy_pick_plan,
@@ -13,187 +13,22 @@ init_db()
 # Modern, responsive visual styling. No additional UI package is required.
 st.markdown("""
 <style>
-:root {
-  color-scheme: light;
-  --navy: #142544;
-  --navy-2: #1d3761;
-  --blue: #3268d6;
-  --ink: #18263d;
-  --muted: #697991;
-  --line: #e4eaf2;
-  --canvas: #f4f7fb;
-  --surface: #ffffff;
-}
-html, body, .stApp, [data-testid="stAppViewContainer"],
-[data-testid="stMain"], [data-testid="stMainBlockContainer"] {
-  background: var(--canvas) !important;
-  color: var(--ink) !important;
-}
-.stApp { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-[data-testid="stHeader"] { background: rgba(244,247,251,.94) !important; }
-[data-testid="stToolbar"] { right: 1rem; }
-.block-container {
-  max-width: 1600px;
-  padding: 1.8rem 2.25rem 3rem !important;
-}
-h1, h2, h3, h4, h5, h6 {
-  color: var(--ink) !important;
-  font-weight: 750 !important;
-  letter-spacing: -.025em !important;
-}
-h1 { font-size: 2rem !important; }
-h2 { font-size: 1.55rem !important; }
-h3 { font-size: 1.25rem !important; }
-p, li, label, [data-testid="stMarkdownContainer"] {
-  color: var(--ink);
-}
-[data-testid="stCaptionContainer"] p, .stCaption {
-  color: var(--muted) !important;
-}
-.hero {
-  position: relative;
-  overflow: hidden;
-  padding: 1.8rem 2rem;
-  border-radius: 22px;
-  background: linear-gradient(112deg, #142544 0%, #214b8d 58%, #3978dc 100%);
-  color: #fff !important;
-  margin: .15rem 0 1.55rem;
-  box-shadow: 0 14px 34px rgba(30,70,135,.17);
-}
-.hero:after {
-  content: "";
-  position: absolute;
-  width: 270px; height: 270px;
-  right: -65px; top: -155px;
-  border: 1px solid rgba(255,255,255,.18);
-  border-radius: 50%;
-  box-shadow: 0 0 0 28px rgba(255,255,255,.045), 0 0 0 58px rgba(255,255,255,.03);
-  pointer-events: none;
-}
-.hero h1 { color: #fff !important; margin: 0 !important; font-size: 1.95rem !important; }
-.hero p { color: #e0ebff !important; margin: .55rem 0 0 !important; font-size: 1rem; }
-.section-title { font-size: 1.15rem; font-weight: 750; color: var(--ink); margin: .8rem 0 .4rem; }
-
-/* Sidebar */
-[data-testid="stSidebar"] {
-  background: linear-gradient(180deg, #101d35 0%, #172e52 100%) !important;
-  border-right: 1px solid rgba(255,255,255,.08);
-}
-[data-testid="stSidebar"] > div:first-child { background: transparent !important; }
-[data-testid="stSidebar"] * { color: #eef4ff !important; }
-[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
-[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
-  color: #aebed7 !important;
-}
-[data-testid="stSidebar"] [data-testid="stRadio"] > label {
-  color: #aebed7 !important;
-  font-size: .74rem !important;
-  font-weight: 800 !important;
-  letter-spacing: .1em;
-}
-[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] { gap: .2rem; }
-[data-testid="stSidebar"] [data-testid="stRadio"] label {
-  border-radius: 10px;
-  padding: .5rem .6rem;
-  transition: background .15s ease;
-}
-[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background: rgba(255,255,255,.09); }
-[data-testid="stSidebar"] [data-testid="stRadio"] label p { color: #edf3ff !important; font-weight: 600; }
-
-/* KPI cards */
-[data-testid="stMetric"] {
-  background: #fff !important;
-  border: 1px solid var(--line) !important;
-  border-radius: 16px !important;
-  padding: 1rem 1.1rem !important;
-  min-height: 108px;
-  box-shadow: 0 5px 18px rgba(23,36,58,.045);
-}
-[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] p {
-  color: #6a7890 !important;
-  font-weight: 650 !important;
-}
-[data-testid="stMetricValue"], [data-testid="stMetricValue"] div {
-  color: #18263d !important;
-  font-size: 1.95rem !important;
-  font-weight: 800 !important;
-}
-[data-testid="stMetricDelta"] { color: #287a57 !important; }
-
-/* Controls */
-.stButton > button, .stDownloadButton > button,
-[data-testid="stFormSubmitButton"] button {
-  min-height: 2.6rem;
-  border-radius: 10px !important;
-  border: 1px solid #dce4ef !important;
-  background: #fff !important;
-  color: #263751 !important;
-  font-weight: 700 !important;
-  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
-}
-.stButton > button:hover, .stDownloadButton > button:hover {
-  border-color: #9bb7ed !important;
-  box-shadow: 0 5px 14px rgba(40,75,130,.10);
-  transform: translateY(-1px);
-}
-.stButton > button[kind="primary"],
-[data-testid="stFormSubmitButton"] button[kind="primary"] {
-  background: linear-gradient(110deg,#2858c5,#397be0) !important;
-  border: 0 !important;
-  color: #fff !important;
-}
-[data-testid="stTextInput"] input,
-[data-testid="stNumberInput"] input,
-[data-testid="stTextArea"] textarea {
-  background: #fff !important;
-  color: #18263d !important;
-  border: 1px solid #d9e1ec !important;
-  border-radius: 10px !important;
-}
-[data-testid="stSelectbox"] [data-baseweb="select"] > div,
-[data-testid="stMultiSelect"] [data-baseweb="select"] > div {
-  background: #fff !important;
-  color: #18263d !important;
-  border-color: #d9e1ec !important;
-  border-radius: 10px !important;
-}
-[data-testid="stWidgetLabel"] p { color: #40516a !important; font-weight: 650 !important; }
-[data-baseweb="popover"], [data-baseweb="menu"], [role="listbox"] {
-  background: #fff !important;
-  color: #18263d !important;
-}
-
-/* Tabs, tables, alerts */
-.stTabs [data-baseweb="tab-list"] {
-  gap: 7px;
-  background: #eaf0f8;
-  padding: 5px;
-  border-radius: 12px;
-}
-.stTabs [data-baseweb="tab"] {
-  border-radius: 9px;
-  padding: 9px 15px;
-  color: #52627a !important;
-}
-.stTabs [aria-selected="true"] {
-  background: #fff !important;
-  color: #234fae !important;
-  box-shadow: 0 2px 8px rgba(23,36,58,.08);
-}
-[data-testid="stDataFrame"], [data-testid="stTable"] {
-  border: 1px solid #e3e9f1;
-  border-radius: 13px;
-  overflow: hidden;
-  background: #fff !important;
-}
-[data-testid="stDataFrame"] * { color: #26364d !important; }
-[data-testid="stAlert"] { border-radius: 12px !important; }
-hr { border-color: #e1e7f0 !important; }
-@media (max-width: 900px) {
-  .block-container { padding: 1rem 1rem 2rem !important; }
-  .hero { padding: 1.4rem; border-radius: 16px; }
-  .hero h1 { font-size: 1.55rem !important; }
-}
+:root { --brand:#2563eb; --ink:#172033; --muted:#667085; }
+.block-container { padding-top: 1.5rem; padding-bottom: 2.5rem; max-width: 1500px; }
+[data-testid="stSidebar"] { background: linear-gradient(180deg,#101c35 0%,#172b4d 100%); }
+[data-testid="stSidebar"] * { color: #f5f7fb !important; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label { padding: .35rem .55rem; border-radius: 9px; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background: #ffffff18; }
+.hero { padding: 1.35rem 1.55rem; border-radius: 18px; background: linear-gradient(115deg,#14213d,#2457a7 68%,#3979d8); color: white; margin-bottom: 1.15rem; box-shadow: 0 10px 28px #1d355722; }
+.hero h1 { color:white; margin:0; font-size:1.8rem; letter-spacing:-.03em; }
+.hero p { color:#dbeafe; margin:.35rem 0 0 0; }
+.section-title { font-size:1.15rem; font-weight:700; color:#1d2939; margin:.7rem 0 .35rem; }
+div[data-testid="stMetric"] { background:linear-gradient(180deg,#fff,#f8fbff); border:1px solid #e5eaf2; padding:14px 16px; border-radius:14px; box-shadow:0 3px 12px #10182808; }
+.stButton>button, .stDownloadButton>button { border-radius:10px; font-weight:600; }
+.stTabs [data-baseweb="tab-list"] { gap:8px; }
+.stTabs [data-baseweb="tab"] { border-radius:9px 9px 0 0; padding:9px 15px; }
+[data-testid="stDataFrame"] { border:1px solid #e7ebf2; border-radius:12px; overflow:hidden; }
+div[data-testid="stAlert"] { border-radius:12px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -512,121 +347,48 @@ elif page == "Warehouse Layout":
 
 elif page == "Orders":
     st.subheader("Customer order management")
-    st.caption("Build a shopping cart with multiple products, then place everything as one customer order.")
     products = get_products()
     if not products:
         st.info("Add inventory before creating an order.")
     else:
-        product_by_id = {int(p["id"]): p for p in products}
-        st.session_state.setdefault("order_cart", {})
-        cart = st.session_state["order_cart"]
-
-        with st.container(border=True):
-            st.markdown("### 1. Customer and delivery details")
-            customer_col, destination_col, priority_col = st.columns([1.4, 1, 1])
-            customer = customer_col.text_input("Customer name", key="multi_order_customer", placeholder="Enter customer name")
-            destination = destination_col.selectbox("Delivery destination", DESTINATIONS, key="multi_order_destination")
-            priority_label = priority_col.selectbox("Order priority", ["Urgent", "High", "Normal", "Low"], index=2, key="multi_order_priority")
-            priority = {"Urgent": 1, "High": 2, "Normal": 3, "Low": 4}[priority_label]
-
-        with st.container(border=True):
-            st.markdown("### 2. Add products to cart")
-            available_products = [p for p in products if int(p["quantity"]) > 0]
-            if available_products:
-                product_options = {
-                    f'{p["name"]} · {p["sku"]} · {p["quantity"]} available': int(p["id"])
-                    for p in available_products
-                }
-                add_col, qty_col, action_col = st.columns([2.2, 0.8, 1])
-                selected_label = add_col.selectbox("Choose product", list(product_options), key="cart_product_choice")
-                selected_id = product_options[selected_label]
-                selected_product = product_by_id[selected_id]
-                add_qty = qty_col.number_input("Quantity", min_value=1, max_value=max(1, int(selected_product["quantity"])), value=1, step=1, key="cart_add_quantity")
-                if action_col.button("＋ Add to cart", use_container_width=True, type="primary"):
-                    new_total = int(cart.get(selected_id, 0)) + int(add_qty)
-                    if new_total > int(selected_product["quantity"]):
-                        st.error(f'Only {selected_product["quantity"]} unit(s) of {selected_product["name"]} are available in stock.')
+        with st.form("new_order_form", clear_on_submit=True):
+            customer = st.text_input("Customer name")
+            destination = st.selectbox("Delivery destination", DESTINATIONS)
+            product_map = {f'{p["name"]} | {p["sku"]} | stock: {p["quantity"]}': p for p in products}
+            product_label = st.selectbox("Product", list(product_map))
+            qty = st.number_input("Quantity", min_value=1, value=1, step=1)
+            priority_label = st.select_slider("Order priority", options=["Urgent","High","Normal","Low"], value="Normal")
+            priority = {"Urgent":1,"High":2,"Normal":3,"Low":4}[priority_label]
+            submit = st.form_submit_button("Place order")
+            if submit:
+                try:
+                    if not customer.strip():
+                        st.error("Enter a customer name.")
                     else:
-                        cart[selected_id] = new_total
-                        st.session_state["order_cart"] = cart
+                        create_order(customer, destination, product_map[product_label]["id"], int(qty), priority)
+                        st.success("Order placed and stock reserved.")
                         st.rerun()
-            else:
-                st.warning("No products currently have available stock.")
-
-            st.markdown("### 3. Review your cart")
-            if cart:
-                total_units = 0
-                for product_id in list(cart.keys()):
-                    product = product_by_id.get(int(product_id))
-                    if product is None:
-                        cart.pop(product_id, None)
-                        continue
-                    line, qty_box, remove_box = st.columns([2.2, 0.8, 0.8])
-                    line.markdown(f'**{product["name"]}**  \n<small>{product["sku"]} · {product["category"]} · Stock: {product["quantity"]}</small>', unsafe_allow_html=True)
-                    max_qty = max(1, int(product["quantity"]))
-                    current_qty = min(int(cart[product_id]), max_qty)
-                    updated_qty = qty_box.number_input("Units", min_value=1, max_value=max_qty, value=current_qty, step=1, key=f"cart_line_qty_{product_id}")
-                    cart[product_id] = int(updated_qty)
-                    total_units += int(updated_qty)
-                    if remove_box.button("Remove", key=f"cart_remove_{product_id}", use_container_width=True):
-                        cart.pop(product_id, None)
-                        st.session_state["order_cart"] = cart
-                        st.rerun()
-                st.session_state["order_cart"] = cart
-                st.divider()
-                total_products = len(cart)
-                metric_a, metric_b = st.columns(2)
-                metric_a.metric("Different products", total_products)
-                metric_b.metric("Total units", total_units)
-                place_col, clear_col = st.columns([2, 1])
-                if place_col.button("Place complete order", type="primary", use_container_width=True, disabled=not bool(cart)):
-                    try:
-                        if not customer.strip():
-                            st.error("Enter a customer name before placing the order.")
-                        else:
-                            group_id = create_multi_item_order(
-                                customer, destination,
-                                [(int(pid), int(qty)) for pid, qty in cart.items()],
-                                priority
-                            )
-                            st.session_state["order_cart"] = {}
-                            st.success(f"Order {group_id} placed successfully with {total_products} product line(s) and {total_units} total unit(s). Stock has been reserved.")
-                            st.rerun()
-                    except Exception as exc:
-                        st.error(str(exc))
-                if clear_col.button("Clear cart", use_container_width=True):
-                    st.session_state["order_cart"] = {}
-                    st.rerun()
-            else:
-                st.info("Your cart is empty. Add one or more products above.")
-
+                except Exception as e:
+                    st.error(str(e))
     st.divider()
     orders = get_orders()
-    st.markdown("**Order items (urgent orders appear first)**")
+    st.markdown("**Orders (urgent orders appear first)**")
     if orders:
         st.dataframe([{
-            "Order ID": o.get("order_group_id") or f'ORD-{o["id"]:04d}',
-            "Line ID": f'#{o["id"]}', "Customer": o["customer"], "Destination": o["destination"],
+            "Order": f'ORD-{o["id"]:04d}', "Customer": o["customer"], "Destination": o["destination"],
             "Product": o["product_name"], "Qty": o["quantity"],
             "Priority": {1:"Urgent",2:"High",3:"Normal",4:"Low"}.get(o["priority"], o["priority"]),
             "Status": o["status"], "Vehicle": o.get("assigned_vehicle") or "Not assigned",
             "Route (km)": o.get("route_km") if o.get("route_km") is not None else "—"
         } for o in orders], use_container_width=True, hide_index=True)
-        pending = [o for o in orders if o["status"] in ("Pending", "Processing", "Dispatched")]
+        pending = [o for o in orders if o["status"] in ("Pending","Processing")]
         if pending:
-            order_groups = {}
-            for order in pending:
-                group_id = order.get("order_group_id") or f'ORD-{order["id"]:06d}'
-                order_groups.setdefault(group_id, []).append(order)
-            order_labels = {
-                f'{group_id} — {rows[0]["customer"]} — {len(rows)} product line(s) — {rows[0]["status"]}': group_id
-                for group_id, rows in order_groups.items()
-            }
-            chosen = st.selectbox("Select complete customer order to update", list(order_labels))
-            new_status = st.selectbox("New status", ["Processing", "Dispatched", "Delivered", "Pending"])
-            if st.button("Update complete order status"):
-                update_order_group_status(order_labels[chosen], new_status)
-                st.success("All product lines in this customer order were updated.")
+            order_map = {f'Order #{o["id"]} — {o["customer"]} — {o["status"]}': o for o in pending}
+            chosen = st.selectbox("Select order to update", list(order_map))
+            new_status = st.selectbox("New status", ["Processing","Dispatched","Delivered","Pending"])
+            if st.button("Update order status"):
+                update_order_status(order_map[chosen]["id"], new_status)
+                st.success("Order status updated.")
                 st.rerun()
     else:
         st.info("No orders yet.")
@@ -655,7 +417,7 @@ elif page == "Smart Delivery Assignment":
         if planned:
             save_delivery_assignments({name: data["orders"] for name, data in planned.items()})
             st.session_state["last_assignment_unassigned"] = unassigned
-            st.success(f"Successfully assigned {sum(len(v['orders']) for v in planned.values())} complete customer order(s) across {len(planned)} vehicle(s).")
+            st.success(f"Successfully assigned {sum(len(v['orders']) for v in planned.values())} order(s) across {len(planned)} vehicle(s).")
             st.rerun()
         else:
             st.warning("No orders could be assigned. Check whether unassigned orders exist and vehicle capacity is sufficient.")
@@ -671,11 +433,10 @@ elif page == "Smart Delivery Assignment":
             by_vehicle.setdefault(order["assigned_vehicle"], []).append(order)
         for vehicle, vehicle_orders in sorted(by_vehicle.items()):
             total_load = sum(int(o["quantity"]) for o in vehicle_orders)
-            route_total = sum(float(o["route_km"] or 0) for o in {o.get("order_group_id") or o["id"]: o for o in vehicle_orders}.values())
-            unique_orders = len({o.get("order_group_id") or o["id"] for o in vehicle_orders})
-            with st.expander(f"{vehicle}  ·  {unique_orders} customer order(s)  ·  {total_load} capacity units  ·  {route_total:.1f} route-km", expanded=True):
+            route_total = sum(float(o["route_km"] or 0) for o in vehicle_orders)
+            with st.expander(f"{vehicle}  ·  {len(vehicle_orders)} order(s)  ·  {total_load} capacity units  ·  {route_total:.1f} route-km", expanded=True):
                 st.dataframe([{
-                    "Order": o.get("order_group_id") or f'ORD-{o["id"]:04d}', "Customer": o["customer"], "Destination": o["destination"],
+                    "Order": f'ORD-{o["id"]:04d}', "Customer": o["customer"], "Destination": o["destination"],
                     "Product": o["product_name"], "Units": o["quantity"],
                     "Priority": {1:"Urgent",2:"High",3:"Normal",4:"Low"}.get(o["priority"], o["priority"]),
                     "Route estimate (km)": o["route_km"]
@@ -686,7 +447,7 @@ elif page == "Smart Delivery Assignment":
     unassigned = st.session_state.get("last_assignment_unassigned", [])
     if unassigned:
         st.markdown("### Orders not assigned")
-        st.dataframe([{"Order ID": o.get("order_group_id") or o["id"], "Customer": o["customer"], "Units": o["quantity"], "Reason": o["reason"]} for o in unassigned], use_container_width=True, hide_index=True)
+        st.dataframe([{"Order ID": o["id"], "Customer": o["customer"], "Units": o["quantity"], "Reason": o["reason"]} for o in unassigned], use_container_width=True, hide_index=True)
     with st.expander("How the assignment algorithm works"):
         st.markdown("""
         1. Ignore delivered orders and orders that already have a vehicle.
