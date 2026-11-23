@@ -73,3 +73,12 @@ The database performs an additive migration for vehicle assignment fields when t
 ## Multi-item customer checkout
 
 On the **Orders** page, enter customer details, add multiple products to the cart, adjust each line quantity, and place the complete order once. Every product line shares one customer order ID. The database checks stock for every cart line before reserving any stock; if one item is unavailable, the complete transaction is rejected and no inventory is deducted. Order status updates and smart vehicle assignment apply to all lines in the customer order. Analytics count distinct customer orders rather than counting each product line as a separate order.
+
+
+## Modern interface theme
+
+The project includes `.streamlit/config.toml`, which sets Streamlit to a consistent
+light theme (light workspace, white panels, dark readable text, and blue accents).
+The app also includes responsive styling for the navy sidebar, dashboard banner,
+metric cards, tabs, forms, and tables. Keep the `.streamlit` folder when copying
+or updating the project; it is part of the interface configuration.

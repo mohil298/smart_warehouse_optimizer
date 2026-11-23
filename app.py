@@ -13,22 +13,187 @@ init_db()
 # Modern, responsive visual styling. No additional UI package is required.
 st.markdown("""
 <style>
-:root { --brand:#2563eb; --ink:#172033; --muted:#667085; }
-.block-container { padding-top: 1.5rem; padding-bottom: 2.5rem; max-width: 1500px; }
-[data-testid="stSidebar"] { background: linear-gradient(180deg,#101c35 0%,#172b4d 100%); }
-[data-testid="stSidebar"] * { color: #f5f7fb !important; }
-[data-testid="stSidebar"] [data-testid="stRadio"] label { padding: .35rem .55rem; border-radius: 9px; }
-[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background: #ffffff18; }
-.hero { padding: 1.35rem 1.55rem; border-radius: 18px; background: linear-gradient(115deg,#14213d,#2457a7 68%,#3979d8); color: white; margin-bottom: 1.15rem; box-shadow: 0 10px 28px #1d355722; }
-.hero h1 { color:white; margin:0; font-size:1.8rem; letter-spacing:-.03em; }
-.hero p { color:#dbeafe; margin:.35rem 0 0 0; }
-.section-title { font-size:1.15rem; font-weight:700; color:#1d2939; margin:.7rem 0 .35rem; }
-div[data-testid="stMetric"] { background:linear-gradient(180deg,#fff,#f8fbff); border:1px solid #e5eaf2; padding:14px 16px; border-radius:14px; box-shadow:0 3px 12px #10182808; }
-.stButton>button, .stDownloadButton>button { border-radius:10px; font-weight:600; }
-.stTabs [data-baseweb="tab-list"] { gap:8px; }
-.stTabs [data-baseweb="tab"] { border-radius:9px 9px 0 0; padding:9px 15px; }
-[data-testid="stDataFrame"] { border:1px solid #e7ebf2; border-radius:12px; overflow:hidden; }
-div[data-testid="stAlert"] { border-radius:12px; }
+:root {
+  color-scheme: light;
+  --navy: #142544;
+  --navy-2: #1d3761;
+  --blue: #3268d6;
+  --ink: #18263d;
+  --muted: #697991;
+  --line: #e4eaf2;
+  --canvas: #f4f7fb;
+  --surface: #ffffff;
+}
+html, body, .stApp, [data-testid="stAppViewContainer"],
+[data-testid="stMain"], [data-testid="stMainBlockContainer"] {
+  background: var(--canvas) !important;
+  color: var(--ink) !important;
+}
+.stApp { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+[data-testid="stHeader"] { background: rgba(244,247,251,.94) !important; }
+[data-testid="stToolbar"] { right: 1rem; }
+.block-container {
+  max-width: 1600px;
+  padding: 1.8rem 2.25rem 3rem !important;
+}
+h1, h2, h3, h4, h5, h6 {
+  color: var(--ink) !important;
+  font-weight: 750 !important;
+  letter-spacing: -.025em !important;
+}
+h1 { font-size: 2rem !important; }
+h2 { font-size: 1.55rem !important; }
+h3 { font-size: 1.25rem !important; }
+p, li, label, [data-testid="stMarkdownContainer"] {
+  color: var(--ink);
+}
+[data-testid="stCaptionContainer"] p, .stCaption {
+  color: var(--muted) !important;
+}
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: 1.8rem 2rem;
+  border-radius: 22px;
+  background: linear-gradient(112deg, #142544 0%, #214b8d 58%, #3978dc 100%);
+  color: #fff !important;
+  margin: .15rem 0 1.55rem;
+  box-shadow: 0 14px 34px rgba(30,70,135,.17);
+}
+.hero:after {
+  content: "";
+  position: absolute;
+  width: 270px; height: 270px;
+  right: -65px; top: -155px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 50%;
+  box-shadow: 0 0 0 28px rgba(255,255,255,.045), 0 0 0 58px rgba(255,255,255,.03);
+  pointer-events: none;
+}
+.hero h1 { color: #fff !important; margin: 0 !important; font-size: 1.95rem !important; }
+.hero p { color: #e0ebff !important; margin: .55rem 0 0 !important; font-size: 1rem; }
+.section-title { font-size: 1.15rem; font-weight: 750; color: var(--ink); margin: .8rem 0 .4rem; }
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #101d35 0%, #172e52 100%) !important;
+  border-right: 1px solid rgba(255,255,255,.08);
+}
+[data-testid="stSidebar"] > div:first-child { background: transparent !important; }
+[data-testid="stSidebar"] * { color: #eef4ff !important; }
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
+  color: #aebed7 !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] > label {
+  color: #aebed7 !important;
+  font-size: .74rem !important;
+  font-weight: 800 !important;
+  letter-spacing: .1em;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] { gap: .2rem; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+  border-radius: 10px;
+  padding: .5rem .6rem;
+  transition: background .15s ease;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background: rgba(255,255,255,.09); }
+[data-testid="stSidebar"] [data-testid="stRadio"] label p { color: #edf3ff !important; font-weight: 600; }
+
+/* KPI cards */
+[data-testid="stMetric"] {
+  background: #fff !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 16px !important;
+  padding: 1rem 1.1rem !important;
+  min-height: 108px;
+  box-shadow: 0 5px 18px rgba(23,36,58,.045);
+}
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] p {
+  color: #6a7890 !important;
+  font-weight: 650 !important;
+}
+[data-testid="stMetricValue"], [data-testid="stMetricValue"] div {
+  color: #18263d !important;
+  font-size: 1.95rem !important;
+  font-weight: 800 !important;
+}
+[data-testid="stMetricDelta"] { color: #287a57 !important; }
+
+/* Controls */
+.stButton > button, .stDownloadButton > button,
+[data-testid="stFormSubmitButton"] button {
+  min-height: 2.6rem;
+  border-radius: 10px !important;
+  border: 1px solid #dce4ef !important;
+  background: #fff !important;
+  color: #263751 !important;
+  font-weight: 700 !important;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.stButton > button:hover, .stDownloadButton > button:hover {
+  border-color: #9bb7ed !important;
+  box-shadow: 0 5px 14px rgba(40,75,130,.10);
+  transform: translateY(-1px);
+}
+.stButton > button[kind="primary"],
+[data-testid="stFormSubmitButton"] button[kind="primary"] {
+  background: linear-gradient(110deg,#2858c5,#397be0) !important;
+  border: 0 !important;
+  color: #fff !important;
+}
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+[data-testid="stTextArea"] textarea {
+  background: #fff !important;
+  color: #18263d !important;
+  border: 1px solid #d9e1ec !important;
+  border-radius: 10px !important;
+}
+[data-testid="stSelectbox"] [data-baseweb="select"] > div,
+[data-testid="stMultiSelect"] [data-baseweb="select"] > div {
+  background: #fff !important;
+  color: #18263d !important;
+  border-color: #d9e1ec !important;
+  border-radius: 10px !important;
+}
+[data-testid="stWidgetLabel"] p { color: #40516a !important; font-weight: 650 !important; }
+[data-baseweb="popover"], [data-baseweb="menu"], [role="listbox"] {
+  background: #fff !important;
+  color: #18263d !important;
+}
+
+/* Tabs, tables, alerts */
+.stTabs [data-baseweb="tab-list"] {
+  gap: 7px;
+  background: #eaf0f8;
+  padding: 5px;
+  border-radius: 12px;
+}
+.stTabs [data-baseweb="tab"] {
+  border-radius: 9px;
+  padding: 9px 15px;
+  color: #52627a !important;
+}
+.stTabs [aria-selected="true"] {
+  background: #fff !important;
+  color: #234fae !important;
+  box-shadow: 0 2px 8px rgba(23,36,58,.08);
+}
+[data-testid="stDataFrame"], [data-testid="stTable"] {
+  border: 1px solid #e3e9f1;
+  border-radius: 13px;
+  overflow: hidden;
+  background: #fff !important;
+}
+[data-testid="stDataFrame"] * { color: #26364d !important; }
+[data-testid="stAlert"] { border-radius: 12px !important; }
+hr { border-color: #e1e7f0 !important; }
+@media (max-width: 900px) {
+  .block-container { padding: 1rem 1rem 2rem !important; }
+  .hero { padding: 1.4rem; border-radius: 16px; }
+  .hero h1 { font-size: 1.55rem !important; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -176,7 +341,7 @@ if page == "Dashboard":
     st.subheader("Inventory snapshot")
     products = get_products()
     if products:
-        st.dataframe([{k: p[k] for k in ["sku","name","category","quantity","reorder_level","location"]} for p in products], use_container_width=True, hide_index=True)
+        st.dataframe([{k: p[k] for k in ["sku","name","category","quantity","reorder_level","location"]} for p in products], width="stretch", hide_index=True)
     low = [p for p in products if p["quantity"] <= p["reorder_level"]]
     if low:
         st.warning("Reorder required: " + ", ".join(p["name"] for p in low))
@@ -189,7 +354,7 @@ elif page == "Inventory":
     with tab1:
         search = st.text_input("Search by SKU, product name or category")
         rows = get_products(search)
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.dataframe(rows, width="stretch", hide_index=True)
     with tab2:
         with st.form("add_product_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
@@ -290,7 +455,7 @@ elif page == "Warehouse Layout":
                 if st.button(
                     f"{icon} {shelf_code}{selected_marker}\n{summary}",
                     key=f"warehouse_shelf_{aisle}_{slot}",
-                    use_container_width=True
+                    width="stretch"
                 ):
                     st.session_state["selected_shelf"] = shelf_code
                 st.write("")
@@ -309,7 +474,7 @@ elif page == "Warehouse Layout":
                 "Reorder level": p["reorder_level"],
                 "Status": "Reorder" if p["quantity"] <= p["reorder_level"] else "In stock"
             } for p in selected_products],
-            use_container_width=True,
+            width="stretch",
             hide_index=True
         )
         product_options = {
@@ -377,7 +542,7 @@ elif page == "Orders":
                 selected_id = product_options[selected_label]
                 selected_product = product_by_id[selected_id]
                 add_qty = qty_col.number_input("Quantity", min_value=1, max_value=max(1, int(selected_product["quantity"])), value=1, step=1, key="cart_add_quantity")
-                if action_col.button("＋ Add to cart", use_container_width=True, type="primary"):
+                if action_col.button("＋ Add to cart", width="stretch", type="primary"):
                     new_total = int(cart.get(selected_id, 0)) + int(add_qty)
                     if new_total > int(selected_product["quantity"]):
                         st.error(f'Only {selected_product["quantity"]} unit(s) of {selected_product["name"]} are available in stock.')
@@ -403,7 +568,7 @@ elif page == "Orders":
                     updated_qty = qty_box.number_input("Units", min_value=1, max_value=max_qty, value=current_qty, step=1, key=f"cart_line_qty_{product_id}")
                     cart[product_id] = int(updated_qty)
                     total_units += int(updated_qty)
-                    if remove_box.button("Remove", key=f"cart_remove_{product_id}", use_container_width=True):
+                    if remove_box.button("Remove", key=f"cart_remove_{product_id}", width="stretch"):
                         cart.pop(product_id, None)
                         st.session_state["order_cart"] = cart
                         st.rerun()
@@ -414,7 +579,7 @@ elif page == "Orders":
                 metric_a.metric("Different products", total_products)
                 metric_b.metric("Total units", total_units)
                 place_col, clear_col = st.columns([2, 1])
-                if place_col.button("Place complete order", type="primary", use_container_width=True, disabled=not bool(cart)):
+                if place_col.button("Place complete order", type="primary", width="stretch", disabled=not bool(cart)):
                     try:
                         if not customer.strip():
                             st.error("Enter a customer name before placing the order.")
@@ -429,7 +594,7 @@ elif page == "Orders":
                             st.rerun()
                     except Exception as exc:
                         st.error(str(exc))
-                if clear_col.button("Clear cart", use_container_width=True):
+                if clear_col.button("Clear cart", width="stretch"):
                     st.session_state["order_cart"] = {}
                     st.rerun()
             else:
@@ -446,7 +611,7 @@ elif page == "Orders":
             "Priority": {1:"Urgent",2:"High",3:"Normal",4:"Low"}.get(o["priority"], o["priority"]),
             "Status": o["status"], "Vehicle": o.get("assigned_vehicle") or "Not assigned",
             "Route (km)": o.get("route_km") if o.get("route_km") is not None else "—"
-        } for o in orders], use_container_width=True, hide_index=True)
+        } for o in orders], width="stretch", hide_index=True)
         pending = [o for o in orders if o["status"] in ("Pending", "Processing", "Dispatched")]
         if pending:
             order_groups = {}
@@ -481,7 +646,7 @@ elif page == "Smart Delivery Assignment":
         a, b = st.columns(2)
         vehicle_count = a.number_input("Available vehicles", min_value=1, max_value=30, value=3, step=1)
         capacity_units = b.number_input("Capacity per vehicle (order units)", min_value=1, max_value=500, value=20, step=1)
-        run_assignment = st.form_submit_button("🚚 Generate smart assignments", type="primary", use_container_width=True)
+        run_assignment = st.form_submit_button("🚚 Generate smart assignments", type="primary", width="stretch")
     if run_assignment:
         planned, unassigned = smart_delivery_assignment(
             eligible, int(vehicle_count), int(capacity_units),
@@ -514,14 +679,14 @@ elif page == "Smart Delivery Assignment":
                     "Product": o["product_name"], "Units": o["quantity"],
                     "Priority": {1:"Urgent",2:"High",3:"Normal",4:"Low"}.get(o["priority"], o["priority"]),
                     "Route estimate (km)": o["route_km"]
-                } for o in vehicle_orders], use_container_width=True, hide_index=True)
+                } for o in vehicle_orders], width="stretch", hide_index=True)
                 st.progress(min(total_load / max(int(capacity_units), 1), 1.0), text=f"Illustrative capacity utilisation: {total_load} / {int(capacity_units)} units")
     else:
         st.info("No active vehicle assignments yet. Generate assignments above after placing customer orders.")
     unassigned = st.session_state.get("last_assignment_unassigned", [])
     if unassigned:
         st.markdown("### Orders not assigned")
-        st.dataframe([{"Order ID": o.get("order_group_id") or o["id"], "Customer": o["customer"], "Units": o["quantity"], "Reason": o["reason"]} for o in unassigned], use_container_width=True, hide_index=True)
+        st.dataframe([{"Order ID": o.get("order_group_id") or o["id"], "Customer": o["customer"], "Units": o["quantity"], "Reason": o["reason"]} for o in unassigned], width="stretch", hide_index=True)
     with st.expander("How the assignment algorithm works"):
         st.markdown("""
         1. Ignore delivered orders and orders that already have a vehicle.
@@ -557,7 +722,7 @@ elif page == "Advanced Analytics":
             st.markdown("**Orders by status**")
             status_data = [{"Status": r["status"], "Orders": r["total"]} for r in analytics["status"]]
             if status_data:
-                st.bar_chart(status_data, x="Status", y="Orders", use_container_width=True)
+                st.bar_chart(status_data, x="Status", y="Orders", width="stretch")
             else:
                 st.info("No order data yet.")
         with right:
@@ -565,21 +730,21 @@ elif page == "Advanced Analytics":
             priority_names = {1:"Urgent",2:"High",3:"Normal",4:"Low"}
             priority_data = [{"Priority": priority_names.get(r["priority"], str(r["priority"])), "Orders": r["total"]} for r in analytics["priority"]]
             if priority_data:
-                st.bar_chart(priority_data, x="Priority", y="Orders", use_container_width=True)
+                st.bar_chart(priority_data, x="Priority", y="Orders", width="stretch")
             else:
                 st.info("Priority analysis will appear after orders are created.")
         st.markdown("**Daily order creation trend**")
         if analytics["daily"]:
-            st.line_chart([{"Date": r["day"], "Orders": r["orders"]} for r in analytics["daily"]], x="Date", y="Orders", use_container_width=True)
+            st.line_chart([{"Date": r["day"], "Orders": r["orders"]} for r in analytics["daily"]], x="Date", y="Orders", width="stretch")
         else:
             st.info("No daily trend available yet.")
-        st.dataframe([{"Status": r["status"], "Order count": r["total"]} for r in analytics["status"]], use_container_width=True, hide_index=True)
+        st.dataframe([{"Status": r["status"], "Order count": r["total"]} for r in analytics["status"]], width="stretch", hide_index=True)
     with tab2:
         left, right = st.columns(2)
         with left:
             st.markdown("**Available units by category**")
             if analytics["category"]:
-                st.bar_chart([{"Category": r["category"], "Units": r["units"] or 0} for r in analytics["category"]], x="Category", y="Units", use_container_width=True)
+                st.bar_chart([{"Category": r["category"], "Units": r["units"] or 0} for r in analytics["category"]], x="Category", y="Units", width="stretch")
             else:
                 st.info("No inventory data available.")
         with right:
@@ -591,17 +756,17 @@ elif page == "Advanced Analytics":
             st.metric("Total SKUs", len(products))
         if low_items:
             st.warning("Items at or below reorder level")
-            st.dataframe([{"SKU": p["sku"], "Product": p["name"], "Stock": p["quantity"], "Reorder at": p["reorder_level"], "Shelf": p["location"], "Shortfall": max(0, p["reorder_level"]-p["quantity"])} for p in low_items], use_container_width=True, hide_index=True)
+            st.dataframe([{"SKU": p["sku"], "Product": p["name"], "Stock": p["quantity"], "Reorder at": p["reorder_level"], "Shelf": p["location"], "Shortfall": max(0, p["reorder_level"]-p["quantity"])} for p in low_items], width="stretch", hide_index=True)
         else:
             st.success("No products currently need replenishment.")
         st.markdown("**Inventory register**")
-        st.dataframe([{"SKU": p["sku"], "Product": p["name"], "Category": p["category"], "Available units": p["quantity"], "Reorder level": p["reorder_level"], "Location": p["location"]} for p in products], use_container_width=True, hide_index=True)
+        st.dataframe([{"SKU": p["sku"], "Product": p["name"], "Category": p["category"], "Available units": p["quantity"], "Reorder level": p["reorder_level"], "Location": p["location"]} for p in products], width="stretch", hide_index=True)
     with tab3:
         left, right = st.columns(2)
         with left:
             st.markdown("**Orders by destination**")
             if analytics["destination"]:
-                st.bar_chart([{"Destination": r["destination"], "Orders": r["total"]} for r in analytics["destination"]], x="Destination", y="Orders", use_container_width=True)
+                st.bar_chart([{"Destination": r["destination"], "Orders": r["total"]} for r in analytics["destination"]], x="Destination", y="Orders", width="stretch")
             else:
                 st.info("Destination analysis will appear after orders are placed.")
         with right:
@@ -617,7 +782,7 @@ elif page == "Advanced Analytics":
             vehicle_loads = {}
             for order in assigned_orders:
                 vehicle_loads[order["assigned_vehicle"]] = vehicle_loads.get(order["assigned_vehicle"], 0) + int(order["quantity"])
-            st.bar_chart([{"Vehicle": v, "Order units": units} for v, units in sorted(vehicle_loads.items())], x="Vehicle", y="Order units", use_container_width=True)
+            st.bar_chart([{"Vehicle": v, "Order units": units} for v, units in sorted(vehicle_loads.items())], x="Vehicle", y="Order units", width="stretch")
         st.caption("Analytics are calculated from orders and inventory stored in your local SQLite database. Route distances and capacity units are prototype estimates.")
 
 elif page == "Delivery Optimizer":
@@ -636,11 +801,11 @@ elif page == "Delivery Optimizer":
     st.session_state["route_step"] = min(st.session_state["route_step"], max_step)
 
     control_a, control_b, control_c, control_d = st.columns([1, 1, 1, 2])
-    if control_a.button("⏮ Reset", use_container_width=True):
+    if control_a.button("⏮ Reset", width="stretch"):
         st.session_state["route_step"] = 0
-    if control_b.button("◀ Previous", disabled=st.session_state["route_step"] == 0, use_container_width=True):
+    if control_b.button("◀ Previous", disabled=st.session_state["route_step"] == 0, width="stretch"):
         st.session_state["route_step"] -= 1
-    if control_c.button("Next ▶", disabled=st.session_state["route_step"] >= max_step, use_container_width=True):
+    if control_c.button("Next ▶", disabled=st.session_state["route_step"] >= max_step, width="stretch"):
         st.session_state["route_step"] += 1
     control_d.caption("Use Next to animate one algorithm event at a time.")
 
@@ -657,14 +822,14 @@ elif page == "Delivery Optimizer":
 
     with st.expander("Tentative distances at this step", expanded=True):
         distance_rows = [{"Location": node, "Tentative distance": "∞" if value == float("inf") else f"{value} km", "Status": "Visited" if node in snapshot["visited"] else ("Currently processing" if node == snapshot["current"] else "Unvisited")} for node, value in snapshot["distances"].items()]
-        st.dataframe(distance_rows, use_container_width=True, hide_index=True)
+        st.dataframe(distance_rows, width="stretch", hide_index=True)
 
     if step_index == max_step and path:
         st.success(f"Shortest route: {' → '.join(path)} | Total distance: {distance} km")
     elif path:
         st.caption("Green edges show the final shortest path for reference; orange highlights the edge being examined in the current step.")
     st.markdown("**Network connections and edge weights (km)**")
-    st.dataframe([{"From":a,"To":b,"Distance (km)":w} for a,b,w in EDGES], use_container_width=True, hide_index=True)
+    st.dataframe([{"From":a,"To":b,"Distance (km)":w} for a,b,w in EDGES], width="stretch", hide_index=True)
     st.caption("All distances are illustrative sample data, not live GPS or road traffic measurements.")
 
 elif page == "DSA Demonstration":
@@ -692,7 +857,7 @@ elif page == "DSA Demonstration":
     if orders:
         st.markdown("**Priority queue output (pending orders)**")
         ordered = prioritize_orders(orders)
-        st.dataframe([{"Order ID":o["id"],"Customer":o["customer"],"Priority":o["priority"],"Product":o["product_name"]} for o in ordered], use_container_width=True, hide_index=True)
+        st.dataframe([{"Order ID":o["id"],"Customer":o["customer"],"Priority":o["priority"],"Product":o["product_name"]} for o in ordered], width="stretch", hide_index=True)
     products = get_products()
     if products:
         st.markdown("**Greedy shelf-picking sequence (sample: all products)**")
