@@ -1,7 +1,5 @@
 __pycache__/
-*.py[cod]
 .venv/
-venv/
+*.pyc
 warehouse.db
-.streamlit/secrets.toml
-.pytest_cache/
+.streamlit/

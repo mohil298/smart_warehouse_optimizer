@@ -1,821 +1,872 @@
 import streamlit as st
-import pandas as pd
 from database import (
-    init_db, add_product, list_products, add_order,
-    list_orders, update_stock, update_order_status, seed_demo_data
+    init_db, get_products, add_product, update_stock, delete_product,
+    create_order, create_multi_item_order, get_orders, update_order_status, update_order_group_status, dashboard_stats,
+    save_delivery_assignments, clear_delivery_assignments, analytics_summary
 )
-from optimizer import (
-    WarehouseGraph, shortest_path, optimize_pick_route,
-    pack_orders, assign_vehicles, forecast_demand
-)
+from algorithms import (dijkstra, prioritize_orders, greedy_pick_plan,
+                        greedy_vehicle_assignment, smart_delivery_assignment)
 
-# ---------------------------------------------------------
-# Page Setup
-# ---------------------------------------------------------
-st.set_page_config(
-    page_title="PickFlow Pro - Intelligent Warehouse System",
-    page_icon="📦",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
-# Initialize database schema and populate demo records if empty
+st.set_page_config(page_title="Smart Warehouse & Delivery", page_icon="📦", layout="wide")
 init_db()
-seed_demo_data(force=False)
 
-# Maintain active navigation state
-if "active_nav" not in st.session_state:
-    st.session_state["active_nav"] = "Dashboard"
-
-def switch_view(new_view):
-    st.session_state["active_nav"] = new_view
-    for k in ["main_nav_selector", "segmented_nav"]:
-        if k in st.session_state:
-            st.session_state[k] = new_view
-
-# ---------------------------------------------------------
-# Custom Styling (Matches PickFlow Pro UI from screenshot)
-# ---------------------------------------------------------
-st.html("""
+# Modern, responsive visual styling. No additional UI package is required.
+st.markdown("""
 <style>
-/* Base overrides */
-.stApp {
-    background-color: #F8FAFC;
-    color: #0F172A;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+:root {
+  color-scheme: light;
+  --navy: #142544;
+  --navy-2: #1d3761;
+  --blue: #3268d6;
+  --ink: #18263d;
+  --muted: #697991;
+  --line: #e4eaf2;
+  --canvas: #f4f7fb;
+  --surface: #ffffff;
 }
-
-/* Remove excessive top padding */
+html, body, .stApp, [data-testid="stAppViewContainer"],
+[data-testid="stMain"], [data-testid="stMainBlockContainer"] {
+  background: var(--canvas) !important;
+  color: var(--ink) !important;
+}
+.stApp { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+[data-testid="stHeader"] { background: rgba(244,247,251,.94) !important; }
+[data-testid="stToolbar"] { right: 1rem; }
 .block-container {
-    padding-top: 1rem !important;
-    padding-bottom: 3rem !important;
-    max-width: 1280px !important;
+  max-width: 1600px;
+  padding: 1.8rem 2.25rem 3rem !important;
+}
+h1, h2, h3, h4, h5, h6 {
+  color: var(--ink) !important;
+  font-weight: 750 !important;
+  letter-spacing: -.025em !important;
+}
+h1 { font-size: 2rem !important; }
+h2 { font-size: 1.55rem !important; }
+h3 { font-size: 1.25rem !important; }
+p, li, label, [data-testid="stMarkdownContainer"] {
+  color: var(--ink);
+}
+[data-testid="stCaptionContainer"] p, .stCaption {
+  color: var(--muted) !important;
+}
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: 1.8rem 2rem;
+  border-radius: 22px;
+  background: linear-gradient(112deg, #142544 0%, #214b8d 58%, #3978dc 100%);
+  color: #fff !important;
+  margin: .15rem 0 1.55rem;
+  box-shadow: 0 14px 34px rgba(30,70,135,.17);
+}
+.hero:after {
+  content: "";
+  position: absolute;
+  width: 270px; height: 270px;
+  right: -65px; top: -155px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 50%;
+  box-shadow: 0 0 0 28px rgba(255,255,255,.045), 0 0 0 58px rgba(255,255,255,.03);
+  pointer-events: none;
+}
+.hero h1 { color: #fff !important; margin: 0 !important; font-size: 1.95rem !important; }
+.hero p { color: #e0ebff !important; margin: .55rem 0 0 !important; font-size: 1rem; }
+.section-title { font-size: 1.15rem; font-weight: 750; color: var(--ink); margin: .8rem 0 .4rem; }
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #101d35 0%, #172e52 100%) !important;
+  border-right: 1px solid rgba(255,255,255,.08);
+}
+[data-testid="stSidebar"] > div:first-child { background: transparent !important; }
+[data-testid="stSidebar"] * { color: #eef4ff !important; }
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
+  color: #aebed7 !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] > label {
+  color: #aebed7 !important;
+  font-size: .74rem !important;
+  font-weight: 800 !important;
+  letter-spacing: .1em;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] { gap: .2rem; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+  border-radius: 10px;
+  padding: .5rem .6rem;
+  transition: background .15s ease;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background: rgba(255,255,255,.09); }
+[data-testid="stSidebar"] [data-testid="stRadio"] label p { color: #edf3ff !important; font-weight: 600; }
+
+/* KPI cards */
+[data-testid="stMetric"] {
+  background: #fff !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 16px !important;
+  padding: 1rem 1.1rem !important;
+  min-height: 108px;
+  box-shadow: 0 5px 18px rgba(23,36,58,.045);
+}
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] p {
+  color: #6a7890 !important;
+  font-weight: 650 !important;
+}
+[data-testid="stMetricValue"], [data-testid="stMetricValue"] div {
+  color: #18263d !important;
+  font-size: 1.95rem !important;
+  font-weight: 800 !important;
+}
+[data-testid="stMetricDelta"] { color: #287a57 !important; }
+
+/* Controls */
+.stButton > button, .stDownloadButton > button,
+[data-testid="stFormSubmitButton"] button {
+  min-height: 2.6rem;
+  border-radius: 10px !important;
+  border: 1px solid #dce4ef !important;
+  background: #fff !important;
+  color: #263751 !important;
+  font-weight: 700 !important;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.stButton > button:hover, .stDownloadButton > button:hover {
+  border-color: #9bb7ed !important;
+  box-shadow: 0 5px 14px rgba(40,75,130,.10);
+  transform: translateY(-1px);
+}
+.stButton > button[kind="primary"],
+[data-testid="stFormSubmitButton"] button[kind="primary"] {
+  background: linear-gradient(110deg,#2858c5,#397be0) !important;
+  border: 0 !important;
+  color: #fff !important;
+}
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+[data-testid="stTextArea"] textarea {
+  background: #fff !important;
+  color: #18263d !important;
+  border: 1px solid #d9e1ec !important;
+  border-radius: 10px !important;
+}
+[data-testid="stSelectbox"] [data-baseweb="select"] > div,
+[data-testid="stMultiSelect"] [data-baseweb="select"] > div {
+  background: #fff !important;
+  color: #18263d !important;
+  border-color: #d9e1ec !important;
+  border-radius: 10px !important;
+}
+[data-testid="stWidgetLabel"] p { color: #40516a !important; font-weight: 650 !important; }
+[data-baseweb="popover"], [data-baseweb="menu"], [role="listbox"] {
+  background: #fff !important;
+  color: #18263d !important;
 }
 
-/* Top Purple Demo Banner */
-.demo-banner {
-    background: linear-gradient(90deg, #6366F1, #8B5CF6);
-    color: #FFFFFF;
-    text-align: center;
-    padding: 6px 14px;
-    font-size: 0.82rem;
-    font-weight: 500;
-    border-radius: 8px;
-    margin-bottom: 14px;
-    box-shadow: 0 1px 3px rgba(99, 102, 241, 0.2);
+/* Tabs, tables, alerts */
+.stTabs [data-baseweb="tab-list"] {
+  gap: 7px;
+  background: #eaf0f8;
+  padding: 5px;
+  border-radius: 12px;
 }
-
-/* Custom Header Bar */
-.header-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: #FFFFFF;
-    padding: 12px 24px;
-    border-radius: 16px;
-    border: 1px solid #E2E8F0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
-    margin-bottom: 22px;
+.stTabs [data-baseweb="tab"] {
+  border-radius: 9px;
+  padding: 9px 15px;
+  color: #52627a !important;
 }
-.brand-group {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+.stTabs [aria-selected="true"] {
+  background: #fff !important;
+  color: #234fae !important;
+  box-shadow: 0 2px 8px rgba(23,36,58,.08);
 }
-.brand-icon {
-    width: 42px;
-    height: 42px;
-    background: linear-gradient(135deg, #4F46E5, #7C3AED);
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 1.4rem;
-    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+[data-testid="stDataFrame"], [data-testid="stTable"] {
+  border: 1px solid #e3e9f1;
+  border-radius: 13px;
+  overflow: hidden;
+  background: #fff !important;
 }
-.brand-title {
-    font-size: 1.25rem;
-    font-weight: 800;
-    color: #1E1B4B;
-    line-height: 1.2;
-    margin: 0;
+[data-testid="stDataFrame"] * { color: #26364d !important; }
+[data-testid="stAlert"] { border-radius: 12px !important; }
+hr { border-color: #e1e7f0 !important; }
+@media (max-width: 900px) {
+  .block-container { padding: 1rem 1rem 2rem !important; }
+  .hero { padding: 1.4rem; border-radius: 16px; }
+  .hero h1 { font-size: 1.55rem !important; }
 }
-.brand-subtitle {
-    font-size: 0.78rem;
-    color: #64748B;
-    margin: 0;
-    font-weight: 500;
-}
-.header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-.badge-pill {
-    background: #F1F5F9;
-    color: #475569;
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid #E2E8F0;
-}
-
-/* Page Title & Subtitle */
-.page-header-title {
-    font-size: 1.85rem;
-    font-weight: 800;
-    color: #0F172A;
-    margin-bottom: 2px;
-}
-.page-header-sub {
-    font-size: 0.95rem;
-    color: #64748B;
-    margin-bottom: 20px;
-}
-
-/* KPI Metric Cards */
-.kpi-container {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 28px;
-}
-.kpi-card {
-    border-radius: 18px;
-    padding: 20px 22px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.kpi-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.05);
-}
-.kpi-card-blue {
-    background: #F0F7FF;
-    border: 1px solid #DBEAFE;
-}
-.kpi-card-cyan {
-    background: #F0FDF4;
-    border: 1px solid #DCFCE7;
-}
-.kpi-card-yellow {
-    background: #FEFCE8;
-    border: 1px solid #FEF08A;
-}
-.kpi-card-emerald {
-    background: #ECFDF5;
-    border: 1px solid #D1FAE5;
-}
-.kpi-label {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #475569;
-    margin-bottom: 6px;
-}
-.kpi-num {
-    font-size: 2.1rem;
-    font-weight: 800;
-    color: #0F172A;
-    line-height: 1;
-    margin-bottom: 10px;
-}
-.kpi-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 0.78rem;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 10px;
-}
-.badge-green {
-    background: #DCFCE7;
-    color: #166534;
-}
-.badge-amber {
-    background: #FEF3C7;
-    color: #92400E;
-}
-.kpi-icon-box {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.45rem;
-    color: #FFFFFF;
-    flex-shrink: 0;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.08);
-}
-.icon-box-blue { background: #3B82F6; }
-.icon-box-cyan { background: #10B981; }
-.icon-box-yellow { background: #EAB308; }
-.icon-box-emerald { background: #059669; }
-
-/* Quick Actions Section */
-.qa-heading {
-    font-size: 1.25rem;
-    font-weight: 800;
-    color: #0F172A;
-    margin-bottom: 16px;
-}
-
-/* Quick Action Buttons Styling */
-.st-key-qa_receive button,
-.st-key-qa_pick button,
-.st-key-qa_stocktake button,
-.st-key-qa_inventory button,
-.st-key-qa_reports button,
-.st-key-qa_settings button {
-    height: 105px !important;
-    border-radius: 18px !important;
-    border: none !important;
-    padding: 16px 20px !important;
-    text-align: center !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    white-space: pre-line !important;
-}
-.st-key-qa_receive button:hover,
-.st-key-qa_pick button:hover,
-.st-key-qa_stocktake button:hover,
-.st-key-qa_inventory button:hover,
-.st-key-qa_reports button:hover,
-.st-key-qa_settings button:hover {
-    transform: translateY(-3px) !important;
-    filter: brightness(1.06) !important;
-}
-
-/* Individual Quick Action Button Colors */
-.st-key-qa_receive button {
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
-    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3) !important;
-}
-.st-key-qa_pick button {
-    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%) !important;
-    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3) !important;
-}
-.st-key-qa_stocktake button {
-    background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%) !important;
-    box-shadow: 0 4px 14px rgba(139, 92, 246, 0.3) !important;
-}
-.st-key-qa_inventory button {
-    background: linear-gradient(135deg, #4F46E5 0%, #4338CA 100%) !important;
-    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3) !important;
-}
-.st-key-qa_reports button {
-    background: linear-gradient(135deg, #F97316 0%, #EA580C 100%) !important;
-    box-shadow: 0 4px 14px rgba(249, 115, 22, 0.3) !important;
-}
-.st-key-qa_settings button {
-    background: linear-gradient(135deg, #374151 0%, #1F2937 100%) !important;
-    box-shadow: 0 4px 14px rgba(55, 65, 81, 0.3) !important;
-}
-
-/* Force bright crisp text on quick action buttons */
-.st-key-qa_receive button *,
-.st-key-qa_pick button *,
-.st-key-qa_stocktake button *,
-.st-key-qa_inventory button *,
-.st-key-qa_reports button *,
-.st-key-qa_settings button * {
-    color: #FFFFFF !important;
-    font-weight: 700 !important;
-}
-
-/* Priority tag chips */
-.priority-chip {
-    padding: 3px 8px;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    display: inline-block;
-}
-.priority-express { background: #FEE2E2; color: #DC2626; }
-.priority-standard { background: #DBEAFE; color: #2563EB; }
-.priority-low { background: #F1F5F9; color: #64748B; }
 </style>
-""")
+""", unsafe_allow_html=True)
 
-# Top banner
-st.html('<div class="demo-banner">PickFlow Pro &bull; Intelligent Warehouse System &bull; Live Optimizer</div>')
-
-# ---------------------------------------------------------
-# Navigation Bar Component
-# ---------------------------------------------------------
-nav_col_brand, nav_col_menu, nav_col_info = st.columns([2.5, 5, 2.5], vertical_alignment="center")
-
-with nav_col_brand:
-    st.html("""
-    <div class="brand-group">
-        <div class="brand-icon">📦</div>
-        <div>
-            <div class="brand-title">PickFlow Pro</div>
-            <div class="brand-subtitle">Intelligent Warehouse System</div>
-        </div>
-    </div>
-    """)
-
-with nav_col_menu:
-    nav_options = ["Dashboard", "Inventory", "Receiving", "Order Picking", "Stock Take", "Admin"]
-    if hasattr(st, "segmented_control"):
-        selected_nav = st.segmented_control(
-            label="Navigation Menu",
-            options=nav_options,
-            default=st.session_state["active_nav"],
-            key="main_nav_selector",
-            label_visibility="collapsed"
-        )
-    elif hasattr(st, "pills"):
-        selected_nav = st.pills(
-            label="Navigation Menu",
-            options=nav_options,
-            default=st.session_state["active_nav"],
-            key="main_nav_selector",
-            label_visibility="collapsed"
-        )
-    else:
-        current_idx = nav_options.index(st.session_state["active_nav"]) if st.session_state["active_nav"] in nav_options else 0
-        selected_nav = st.radio(
-            label="Navigation Menu",
-            options=nav_options,
-            index=current_idx,
-            horizontal=True,
-            key="main_nav_selector",
-            label_visibility="collapsed"
-        )
-    if selected_nav and selected_nav != st.session_state["active_nav"]:
-        st.session_state["active_nav"] = selected_nav
-        st.rerun()
-
-with nav_col_info:
-    products_all = list_products()
-    orders_all = list_orders()
-    low_stock_count = sum(1 for p in products_all if p["quantity"] <= 15)
-    st.html(f"""
-    <div style="display:flex; justify-content: flex-end; align-items: center; gap: 8px;">
-        <span class="badge-pill">🔍 Search</span>
-        <span class="badge-pill" style="background:{'#FEF3C7' if low_stock_count > 0 else '#F1F5F9'}; color:{'#92400E' if low_stock_count > 0 else '#475569'};">
-            🔔 {low_stock_count} Alerts
-        </span>
-        <span class="badge-pill">👤 Operator</span>
-    </div>
-    """)
-
-st.divider()
-
-# Compute live KPIs from database
-total_items = sum(p["quantity"] for p in products_all)
-orders_picked = sum(1 for o in orders_all if o.get("status") == "PICKED")
-low_stock_items = sum(1 for p in products_all if p["quantity"] <= 15)
-items_issued_today = sum(o["quantity"] for o in orders_all if o.get("status") == "PICKED")
+# Weighted undirected delivery network. Distances are illustrative kilometres.
+EDGES = [
+    ("Warehouse", "North Hub", 4), ("Warehouse", "East Hub", 6),
+    ("Warehouse", "South Hub", 5), ("North Hub", "East Hub", 3),
+    ("North Hub", "West Hub", 7), ("East Hub", "Central Hub", 2),
+    ("South Hub", "Central Hub", 4), ("South Hub", "West Hub", 6),
+    ("West Hub", "Central Hub", 3), ("Central Hub", "Customer Zone 1", 4),
+    ("East Hub", "Customer Zone 2", 5), ("South Hub", "Customer Zone 3", 3),
+    ("West Hub", "Customer Zone 4", 4)
+]
+GRAPH = {}
+for a, b, distance in EDGES:
+    GRAPH.setdefault(a, {})[b] = distance
+    GRAPH.setdefault(b, {})[a] = distance
+DESTINATIONS = ["Customer Zone 1", "Customer Zone 2", "Customer Zone 3", "Customer Zone 4"]
 
 
-# =========================================================
-# VIEW 1: DASHBOARD (Exact screenshot recreation)
-# =========================================================
-if st.session_state["active_nav"] == "Dashboard":
-    st.html("""
-    <div>
-        <div class="page-header-title">Warehouse Dashboard</div>
-        <div class="page-header-sub">Welcome to PickFlow Pro - Your intelligent warehouse management solution</div>
-    </div>
-    """)
+def trace_dijkstra(graph, start, destination):
+    """Create teaching snapshots of Dijkstra's min-heap execution."""
+    import heapq
 
-    # 4 KPI Cards (Matching exact color palette & icons from screenshot)
-    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+    distances = {node: float("inf") for node in graph}
+    previous = {}
+    visited = set()
+    distances[start] = 0
+    heap = [(0, start)]
+    steps = [{
+        "current": None, "edge": None, "visited": set(),
+        "distances": distances.copy(), "previous": previous.copy(),
+        "message": f"Start at {start}. Its tentative distance is 0 km; all other nodes are infinity."
+    }]
 
-    with kpi_col1:
-        st.html(f"""
-        <div class="kpi-card kpi-card-blue">
-            <div>
-                <div class="kpi-label">Total Items</div>
-                <div class="kpi-num">{total_items}</div>
-                <div class="kpi-badge badge-green">↗ +12 from yesterday</div>
-            </div>
-            <div class="kpi-icon-box icon-box-blue">📦</div>
-        </div>
-        """)
-
-    with kpi_col2:
-        st.html(f"""
-        <div class="kpi-card kpi-card-cyan">
-            <div>
-                <div class="kpi-label">Orders Picked</div>
-                <div class="kpi-num">{orders_picked}</div>
-                <div class="kpi-badge badge-green">↗ +5.2% from yesterday</div>
-            </div>
-            <div class="kpi-icon-box icon-box-cyan">📈</div>
-        </div>
-        """)
-
-    with kpi_col3:
-        st.html(f"""
-        <div class="kpi-card kpi-card-yellow">
-            <div>
-                <div class="kpi-label">Low Stock Items</div>
-                <div class="kpi-num">{low_stock_items}</div>
-                <div class="kpi-badge badge-amber">⚠ -3 from yesterday</div>
-            </div>
-            <div class="kpi-icon-box icon-box-yellow">⚠️</div>
-        </div>
-        """)
-
-    with kpi_col4:
-        st.html(f"""
-        <div class="kpi-card kpi-card-emerald">
-            <div>
-                <div class="kpi-label">Items Issued Today</div>
-                <div class="kpi-num">{items_issued_today}</div>
-                <div class="kpi-badge badge-green">✔ +18 from yesterday</div>
-            </div>
-            <div class="kpi-icon-box icon-box-emerald">✅</div>
-        </div>
-        """)
-
-    st.write("")
-    st.html('<div class="qa-heading">Quick Actions</div>')
-
-    # Quick Actions Grid (2 rows x 3 columns)
-    qa_r1_c1, qa_r1_c2, qa_r1_c3 = st.columns(3)
-    with qa_r1_c1:
-        if st.button("Receive Stock\nBook items into warehouse", key="qa_receive", width="stretch", icon=":material/move_to_inbox:"):
-            switch_view("Receiving")
-            st.rerun()
-
-    with qa_r1_c2:
-        if st.button("Pick Orders\nIssue items from warehouse", key="qa_pick", width="stretch", icon=":material/shopping_cart_checkout:"):
-            switch_view("Order Picking")
-            st.rerun()
-
-    with qa_r1_c3:
-        if st.button("Stock Take\nPerform inventory count", key="qa_stocktake", width="stretch", icon=":material/sync:"):
-            switch_view("Stock Take")
-            st.rerun()
-
-    qa_r2_c1, qa_r2_c2, qa_r2_c3 = st.columns(3)
-    with qa_r2_c1:
-        if st.button("View Inventory\nBrowse all items", key="qa_inventory", width="stretch", icon=":material/inventory_2:"):
-            switch_view("Inventory")
-            st.rerun()
-
-    with qa_r2_c2:
-        if st.button("Reports\nView analytics & reports", key="qa_reports", width="stretch", icon=":material/bar_chart:"):
-            switch_view("Admin")
-            st.rerun()
-
-    with qa_r2_c3:
-        if st.button("Settings\nSystem configuration", key="qa_settings", width="stretch", icon=":material/settings:"):
-            switch_view("Admin")
-            st.rerun()
-
-    st.write("")
-    st.divider()
-
-    # Live Warehouse Overview Section
-    dash_col_left, dash_col_right = st.columns([6, 4])
-
-    with dash_col_left:
-        st.subheader("📋 Urgent Order Queue (Priority First)")
-        pending_orders = [o for o in orders_all if o.get("status") == "PENDING"]
-        if pending_orders:
-            df_pending = pd.DataFrame(pending_orders)[["id", "sku", "product_name", "quantity", "priority", "delivery_note"]]
-            st.dataframe(df_pending, width="stretch", hide_index=True)
-            if st.button("Go to Order Picking & Path Optimization →", icon=":material/alt_route:"):
-                switch_view("Order Picking")
-                st.rerun()
-        else:
-            st.success("All current orders have been picked and fulfilled!")
-
-    with dash_col_right:
-        st.subheader("⚠️ Stock Level Alerts")
-        low_stock_list = [p for p in products_all if p["quantity"] <= 15]
-        if low_stock_list:
-            df_low = pd.DataFrame(low_stock_list)[["sku", "name", "quantity", "location"]]
-            st.dataframe(df_low, width="stretch", hide_index=True)
-            if st.button("Receive Inbound Stock to Replenish →", icon=":material/add_box:"):
-                switch_view("Receiving")
-                st.rerun()
-        else:
-            st.info("All warehouse stock levels are healthy.")
-
-
-# =========================================================
-# VIEW 2: INVENTORY ("View Inventory")
-# =========================================================
-elif st.session_state["active_nav"] == "Inventory":
-    st.html("""
-    <div>
-        <div class="page-header-title">Warehouse Inventory</div>
-        <div class="page-header-sub">Search, inspect and filter current warehouse stock across all aisles</div>
-    </div>
-    """)
-
-    f_col1, f_col2, f_col3 = st.columns([4, 3, 3])
-    with f_col1:
-        search_query = st.text_input("Search SKU or Name", placeholder="e.g. SKU-1001 or Tape", label_visibility="collapsed")
-    with f_col2:
-        aisle_filter = st.selectbox("Filter by Aisle", ["All Aisles", "Aisle A", "Aisle B", "Aisle C"], label_visibility="collapsed")
-    with f_col3:
-        status_filter = st.selectbox("Stock Status", ["All Stock", "Low Stock (≤15)", "In Stock (>15)"], label_visibility="collapsed")
-
-    filtered_products = products_all
-    if search_query:
-        q = search_query.strip().lower()
-        filtered_products = [p for p in filtered_products if q in p["sku"].lower() or q in p["name"].lower()]
-    if aisle_filter != "All Aisles":
-        aisle_prefix = aisle_filter.split()[-1]
-        filtered_products = [p for p in filtered_products if p["location"].startswith(aisle_prefix)]
-    if status_filter == "Low Stock (≤15)":
-        filtered_products = [p for p in filtered_products if p["quantity"] <= 15]
-    elif status_filter == "In Stock (>15)":
-        filtered_products = [p for p in filtered_products if p["quantity"] > 15]
-
-    st.write(f"Showing **{len(filtered_products)}** products")
-    if filtered_products:
-        st.dataframe(pd.DataFrame(filtered_products), width="stretch", hide_index=True)
-    else:
-        st.warning("No products matched your search.")
-
-    st.divider()
-    st.subheader("Quick Stock Level Adjustment")
-    with st.form("inventory_adjust_form"):
-        adj_col1, adj_col2, adj_col3 = st.columns([4, 3, 3])
-        sku_select = adj_col1.selectbox("Select Product", [f"{p['sku']} - {p['name']} (Qty: {p['quantity']})" for p in products_all])
-        delta_val = adj_col2.number_input("Adjustment Units (+/-)", value=0, step=1)
-        submit_adj = adj_col3.form_submit_button("Update Stock Level", width="stretch")
-        if submit_adj:
-            chosen_sku = sku_select.split(" - ")[0]
-            try:
-                update_stock(chosen_sku, int(delta_val))
-                st.success(f"Updated {chosen_sku} by {delta_val} units.")
-                st.rerun()
-            except ValueError as e:
-                st.error(str(e))
-
-
-# =========================================================
-# VIEW 3: RECEIVING ("Receive Stock")
-# =========================================================
-elif st.session_state["active_nav"] == "Receiving":
-    st.html("""
-    <div>
-        <div class="page-header-title">Receive Stock</div>
-        <div class="page-header-sub">Book incoming supplier shipments and register new items into warehouse locations</div>
-    </div>
-    """)
-
-    rec_tab1, rec_tab2 = st.tabs(["Book New SKU / Product", "Inbound Stock Shipment"])
-
-    with rec_tab1:
-        st.subheader("Register New Product SKU")
-        with st.form("new_product_form"):
-            c1, c2 = st.columns(2)
-            new_sku = c1.text_input("Product SKU", placeholder="e.g. SKU-1016")
-            new_name = c2.text_input("Product Description", placeholder="e.g. Biodegradable Packing Peanuts")
-            c3, c4 = st.columns(2)
-            new_qty = c3.number_input("Received Quantity", min_value=1, value=50, step=1)
-            new_loc = c4.selectbox("Shelf Location", ["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3", "PACK"])
-            save_prod = st.form_submit_button("Book Item into Warehouse", icon=":material/add_box:")
-            if save_prod:
-                if not new_sku.strip() or not new_name.strip():
-                    st.error("Both SKU and Product Description are required.")
-                else:
-                    add_product(new_sku.strip().upper(), new_name.strip(), int(new_qty), new_loc)
-                    st.success(f"Successfully registered {new_sku.upper()} ({new_name.strip()}) with {new_qty} units at shelf {new_loc}!")
-                    st.rerun()
-
-    with rec_tab2:
-        st.subheader("Process Inbound Delivery to Existing Stock")
-        with st.form("inbound_delivery_form"):
-            p_map = {f"{p['sku']} - {p['name']} (Current: {p['quantity']} at {p['location']})": p['sku'] for p in products_all}
-            chosen_label = st.selectbox("Select Existing Item", list(p_map.keys()))
-            inbound_qty = st.number_input("Inbound Units Received", min_value=1, value=25, step=1)
-            inbound_note = st.text_input("Delivery / PO Reference Note", placeholder="PO-9942 from Acme Supplies")
-            submit_inbound = st.form_submit_button("Confirm Inbound Receipt", icon=":material/check_circle:")
-            if submit_inbound:
-                target_sku = p_map[chosen_label]
-                update_stock(target_sku, int(inbound_qty))
-                st.success(f"Receipt confirmed! Added {inbound_qty} units to {target_sku}.")
-                st.rerun()
-
-
-# =========================================================
-# VIEW 4: ORDER PICKING ("Pick Orders & Route Optimizer")
-# =========================================================
-elif st.session_state["active_nav"] == "Order Picking":
-    st.html("""
-    <div>
-        <div class="page-header-title">Order Picking & Route Optimizer</div>
-        <div class="page-header-sub">Priority-based order fulfillment and warehouse aisle shortest-path heuristic (Dijkstra)</div>
-    </div>
-    """)
-
-    pick_tab1, pick_tab2, pick_tab3 = st.tabs(["Active Pick Queue", "Warehouse Route Planner", "Create Customer Order"])
-
-    with pick_tab1:
-        st.subheader("Pending Orders (Priority First)")
-        pending = [o for o in orders_all if o.get("status") == "PENDING"]
-        if pending:
-            for ord_item in pending:
-                card_col1, card_col2, card_col3, card_col4 = st.columns([1.5, 4, 2.5, 2], vertical_alignment="center")
-                pr = ord_item["priority"]
-                color_class = "priority-express" if pr == "EXPRESS" else ("priority-standard" if pr == "STANDARD" else "priority-low")
-                card_col1.html(f"<span class='priority-chip {color_class}'>{pr}</span><br><small>Order #{ord_item['id']}</small>")
-                card_col2.write(f"**{ord_item['product_name']}** ({ord_item['sku']}) &bull; Qty: **{ord_item['quantity']}**")
-                card_col3.caption(f"Note: {ord_item['delivery_note'] or 'None'}")
-                if card_col4.button("Mark Picked ✔", key=f"pick_btn_{ord_item['id']}", width="stretch"):
-                    update_order_status(ord_item['id'], "PICKED")
-                    st.toast(f"Order #{ord_item['id']} marked as PICKED!", icon="✅")
-                    st.rerun()
-                st.divider()
-        else:
-            st.success("No pending orders to pick! All shipments fulfilled.")
-
-    with pick_tab2:
-        st.subheader("Warehouse Aisle Path Optimizer (Dijkstra Heuristic)")
-        st.caption("Calculates the shortest walking route through warehouse aisles to collect stops and return to packing station.")
-        graph = WarehouseGraph()
-        nodes = sorted(graph.adj.keys())
-
-        r_col1, r_col2 = st.columns(2)
-        start_node = r_col1.selectbox("Start / Dispatch Station", nodes, index=nodes.index("PACK") if "PACK" in nodes else 0)
-        
-        # Suggest stops based on locations of pending orders
-        sku_to_loc = {p["sku"]: p["location"] for p in products_all}
-        pending_locations = [sku_to_loc[o["sku"]] for o in pending if o["sku"] in sku_to_loc and sku_to_loc[o["sku"]] in nodes]
-        default_stops = ",".join(list(dict.fromkeys(pending_locations))) if pending_locations else "A1,B2,C1"
-        
-        stops_input = r_col2.text_input("Pick Stops (Comma-separated aisle nodes)", value=default_stops)
-
-        if st.button("Calculate Optimal Walking Route", icon=":material/directions_walk:"):
-            try:
-                pick_stops = [s.strip().upper() for s in stops_input.split(",") if s.strip()]
-                unknown_nodes = [s for s in [start_node] + pick_stops if s not in graph.adj]
-                if unknown_nodes:
-                    st.error(f"Unknown aisle node(s): {', '.join(unknown_nodes)}")
-                elif pick_stops:
-                    route, total_dist = optimize_pick_route(graph, start_node, pick_stops, "PACK")
-                    st.success(f"**Optimal Route:** {' → '.join(route)}")
-                    st.metric("Total Walking Distance", f"{total_dist:.1f} metres")
-                    st.info("Pick sequence generated using nearest-neighbor heuristic over binary-heap Dijkstra paths.")
-            except Exception as e:
-                st.error(f"Routing error: {e}")
-
-    with pick_tab3:
-        st.subheader("Place New Order")
-        with st.form("new_order_form"):
-            prod_lookup = {p["sku"]: p for p in products_all}
-            ord_sku = st.selectbox("Select Product", [f"{p['sku']} - {p['name']} ({p['quantity']} in stock)" for p in products_all])
-            sel_sku = ord_sku.split(" - ")[0]
-            ord_quantity = st.number_input("Order Quantity", min_value=1, value=1, step=1)
-            ord_priority = st.selectbox("Order Priority", ["EXPRESS", "STANDARD", "LOW"])
-            ord_note = st.text_input("Delivery / Packaging Instructions", placeholder="Deliver to Bay 3 before noon")
-            submit_order = st.form_submit_button("Reserve Stock & Create Order", icon=":material/shopping_cart:")
-            if submit_order:
-                p_item = prod_lookup[sel_sku]
-                if p_item["quantity"] < ord_quantity:
-                    st.error(f"Cannot fulfill order: Only {p_item['quantity']} units available in stock.")
-                else:
-                    update_stock(sel_sku, -int(ord_quantity))
-                    oid = add_order(sel_sku, p_item["name"], int(ord_quantity), ord_priority, ord_note)
-                    st.success(f"Order #{oid} placed successfully! Stock reserved.")
-                    st.rerun()
-
-
-# =========================================================
-# VIEW 5: STOCK TAKE ("Perform Inventory Count")
-# =========================================================
-elif st.session_state["active_nav"] == "Stock Take":
-    st.html("""
-    <div>
-        <div class="page-header-title">Stock Take & Inventory Audit</div>
-        <div class="page-header-sub">Perform physical cycle counts, flag inventory discrepancies and reconcile variances</div>
-    </div>
-    """)
-
-    st.subheader("Live Warehouse Cycle Count Sheet")
-    st.caption("Compare on-hand physical count against system records.")
-
-    audit_data = []
-    for p in products_all:
-        audit_data.append({
-            "SKU": p["sku"],
-            "Description": p["name"],
-            "Location": p["location"],
-            "System Count": p["quantity"],
-            "Status": "Low Stock" if p["quantity"] <= 15 else "Adequate"
+    while heap:
+        current_distance, node = heapq.heappop(heap)
+        if node in visited or current_distance != distances[node]:
+            continue
+        visited.add(node)
+        steps.append({
+            "current": node, "edge": None, "visited": visited.copy(),
+            "distances": distances.copy(), "previous": previous.copy(),
+            "message": f"Select {node} from the min-heap ({current_distance} km) and mark it visited."
         })
+        if node == destination:
+            break
+        for neighbor, weight in graph[node].items():
+            if neighbor in visited:
+                continue
+            candidate = current_distance + weight
+            if candidate < distances[neighbor]:
+                distances[neighbor] = candidate
+                previous[neighbor] = node
+                heapq.heappush(heap, (candidate, neighbor))
+                message = f"Update {neighbor}: {current_distance} + {weight} = {candidate} km via {node}."
+            else:
+                message = f"Check {node} → {neighbor} ({weight} km): existing estimate for {neighbor} is better."
+            steps.append({
+                "current": node, "edge": (node, neighbor), "visited": visited.copy(),
+                "distances": distances.copy(), "previous": previous.copy(),
+                "message": message
+            })
 
-    st.dataframe(pd.DataFrame(audit_data), width="stretch", hide_index=True)
+    path = []
+    if distances[destination] != float("inf"):
+        cursor = destination
+        while cursor != start:
+            path.append(cursor)
+            cursor = previous[cursor]
+        path.append(start)
+        path.reverse()
+    steps.append({
+        "current": destination if path else None, "edge": None,
+        "visited": visited.copy(), "distances": distances.copy(),
+        "previous": previous.copy(),
+        "message": "Destination reached. The highlighted path is the shortest route." if path else "No route exists to this destination."
+    })
+    return steps, path, distances[destination]
+
+
+def draw_route_graph(graph, edges, snapshot, start, destination, final_path):
+    """Render the fixed teaching network as an SVG with live algorithm states."""
+    positions = {
+        "Warehouse": (75, 205), "North Hub": (235, 75),
+        "East Hub": (405, 115), "South Hub": (235, 340),
+        "West Hub": (405, 300), "Central Hub": (590, 220),
+        "Customer Zone 1": (790, 110), "Customer Zone 2": (790, 230),
+        "Customer Zone 3": (405, 425), "Customer Zone 4": (590, 390)
+    }
+    visited = snapshot["visited"]
+    current = snapshot["current"]
+    current_edge = snapshot["edge"]
+    distance_map = snapshot["distances"]
+    path_edges = {frozenset((a, b)) for a, b in zip(final_path, final_path[1:])}
+    pieces = ['<svg viewBox="0 0 880 490" role="img" aria-label="Dijkstra delivery network" style="width:100%;height:auto;background:#fbfcfe;border:1px solid #d9e0e8;border-radius:12px">']
+    for a, b, weight in edges:
+        x1, y1 = positions[a]
+        x2, y2 = positions[b]
+        pair = frozenset((a, b))
+        on_path = bool(final_path) and pair in path_edges
+        active = current_edge is not None and pair == frozenset(current_edge)
+        color = "#16a34a" if on_path else ("#f59e0b" if active else "#b8c2cf")
+        width = 6 if on_path else (5 if active else 2.5)
+        pieces.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{color}" stroke-width="{width}" stroke-linecap="round"/>')
+        mx, my = (x1+x2)/2, (y1+y2)/2
+        pieces.append(f'<rect x="{mx-13}" y="{my-12}" width="26" height="20" rx="6" fill="#ffffff" stroke="#d1d9e3"/><text x="{mx}" y="{my+3}" text-anchor="middle" font-size="12" font-weight="600" fill="#344054">{weight}</text>')
+    for node, (x, y) in positions.items():
+        if node == current:
+            fill, stroke = "#fef3c7", "#d97706"
+        elif node == start:
+            fill, stroke = "#dcfce7", "#16a34a"
+        elif node == destination:
+            fill, stroke = "#fee2e2", "#dc2626"
+        elif node in visited:
+            fill, stroke = "#dbeafe", "#2563eb"
+        else:
+            fill, stroke = "#f3f4f6", "#8994a3"
+        dist = distance_map.get(node, float("inf"))
+        dist_text = "∞" if dist == float("inf") else f"{int(dist)} km"
+        label = node.replace("Customer Zone ", "Zone ")
+        pieces.append(f'<circle cx="{x}" cy="{y}" r="28" fill="{fill}" stroke="{stroke}" stroke-width="3"/>')
+        pieces.append(f'<text x="{x}" y="{y+4}" text-anchor="middle" font-size="11" font-weight="700" fill="#172033">{dist_text}</text>')
+        pieces.append(f'<text x="{x}" y="{y+47}" text-anchor="middle" font-size="13" font-weight="600" fill="#172033">{label}</text>')
+    pieces.append('</svg>')
+    return "".join(pieces)
+
+st.markdown('<div class="hero"><h1>📦 Smart Warehouse & Delivery Suite</h1><p>Intelligent inventory control · Priority-aware dispatch · Shortest-path routing · Operational analytics</p></div>', unsafe_allow_html=True)
+with st.sidebar:
+    st.markdown("## WAREHOUSE OPS")
+    page = st.radio("WORKSPACE", ["Dashboard", "Inventory", "Warehouse Layout", "Orders", "Smart Delivery Assignment", "Delivery Optimizer", "Advanced Analytics", "DSA Demonstration"])
+    st.divider()
+    st.caption("M.Tech DSA Project · Python 3.11")
+
+if page == "Dashboard":
+    st.subheader("Operations overview")
+    st.caption("A live snapshot of stock health, order flow and fulfilment activity.")
+    stats = dashboard_stats()
+    cols = st.columns(5)
+    labels = [("Products", stats["products"]), ("Units in stock", stats["units"]),
+              ("Pending orders", stats["pending"]), ("Delivered", stats["completed"]),
+              ("Low-stock items", stats["low"])]
+    for col, (label, value) in zip(cols, labels):
+        col.metric(label, value)
+    st.subheader("Inventory snapshot")
+    products = get_products()
+    if products:
+        st.dataframe([{k: p[k] for k in ["sku","name","category","quantity","reorder_level","location"]} for p in products], use_container_width=True, hide_index=True)
+    low = [p for p in products if p["quantity"] <= p["reorder_level"]]
+    if low:
+        st.warning("Reorder required: " + ", ".join(p["name"] for p in low))
+    else:
+        st.success("All products are above their reorder levels.")
+
+elif page == "Inventory":
+    st.subheader("Inventory management")
+    tab1, tab2, tab3 = st.tabs(["View / Search", "Add product", "Update / Delete"])
+    with tab1:
+        search = st.text_input("Search by SKU, product name or category")
+        rows = get_products(search)
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+    with tab2:
+        with st.form("add_product_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            sku = c1.text_input("SKU (unique)", placeholder="SKU-2001")
+            name = c2.text_input("Product name")
+            category = c1.selectbox("Category", ["Electronics","Stationery","Lifestyle","Home","Other"])
+            quantity = c2.number_input("Initial quantity", min_value=0, value=10, step=1)
+            reorder = c1.number_input("Reorder level", min_value=0, value=5, step=1)
+            location = c2.text_input("Shelf location", placeholder="A-03")
+            submitted = st.form_submit_button("Add product")
+            if submitted:
+                try:
+                    if not sku.strip() or not name.strip() or not location.strip():
+                        st.error("SKU, product name and shelf location are required.")
+                    else:
+                        add_product(sku, name, category, int(quantity), int(reorder), location)
+                        st.success("Product added.")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Could not add product: {e}")
+    with tab3:
+        products = get_products()
+        if products:
+            options = {f'{p["sku"]} — {p["name"]} (ID {p["id"]})': p for p in products}
+            selected_label = st.selectbox("Select product", list(options))
+            selected = options[selected_label]
+            new_qty = st.number_input("Set available quantity", min_value=0, value=int(selected["quantity"]), step=1)
+            if st.button("Save stock quantity"):
+                update_stock(selected["id"], int(new_qty))
+                st.success("Stock updated.")
+                st.rerun()
+            if st.button("Delete selected product"):
+                try:
+                    delete_product(selected["id"])
+                    st.success("Product deleted.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
+
+
+elif page == "Warehouse Layout":
+    st.subheader("Interactive warehouse floor layout")
+    st.caption("Select a shelf to inspect the products stored there. Shelf indicators are calculated from live inventory records.")
+
+    products = get_products()
+
+    def parse_shelf_code(code):
+        code = str(code).strip().upper()
+        if "-" in code:
+            aisle, slot = code.split("-", 1)
+            return aisle.strip() or "OTHER", slot.strip() or "01"
+        return "OTHER", code or "01"
+
+    locations = {}
+    for product in products:
+        locations.setdefault(product["location"].strip().upper(), []).append(product)
+
+    aisle_names = sorted({"A", "B", "C", "D"} | {parse_shelf_code(loc)[0] for loc in locations})
+    slot_names = {f"{i:02d}" for i in range(1, 7)}
+    slot_names |= {parse_shelf_code(loc)[1] for loc in locations}
+    ordered_slots = sorted(slot_names, key=lambda value: (0, int(value)) if value.isdigit() else (1, value))
+
+    total_shelves = len(aisle_names) * len(ordered_slots)
+    occupied_shelves = len(locations)
+    low_stock_count = sum(1 for p in products if p["quantity"] <= p["reorder_level"])
+
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Aisles", len(aisle_names))
+    metric_cols[1].metric("Shelf positions", total_shelves)
+    metric_cols[2].metric("Occupied locations", occupied_shelves)
+    metric_cols[3].metric("Low-stock products", low_stock_count)
+
+    st.markdown("**Shelf status legend**")
+    legend1, legend2, legend3 = st.columns(3)
+    legend1.success("🟢 In stock")
+    legend2.warning("🟠 Reorder required")
+    legend3.info("⚪ Empty shelf")
+
+    if "selected_shelf" not in st.session_state:
+        st.session_state["selected_shelf"] = "A-01"
+
+    st.markdown("### Floor plan")
+    st.caption("Aisles are shown as columns. Select any shelf card to view its inventory.")
+    aisle_columns = st.columns(len(aisle_names))
+    for aisle_index, aisle in enumerate(aisle_names):
+        with aisle_columns[aisle_index]:
+            st.markdown(f"**AISLE {aisle}**")
+            for slot in ordered_slots:
+                shelf_code = f"{aisle}-{slot}"
+                shelf_products = locations.get(shelf_code, [])
+                if not shelf_products:
+                    icon, summary = "⚪", "Empty"
+                elif any(p["quantity"] <= p["reorder_level"] for p in shelf_products):
+                    icon, summary = "🟠", f'{len(shelf_products)} product(s) · low stock'
+                else:
+                    icon, summary = "🟢", f'{len(shelf_products)} product(s)'
+                selected_marker = " ◀" if st.session_state["selected_shelf"] == shelf_code else ""
+                if st.button(
+                    f"{icon} {shelf_code}{selected_marker}\n{summary}",
+                    key=f"warehouse_shelf_{aisle}_{slot}",
+                    use_container_width=True
+                ):
+                    st.session_state["selected_shelf"] = shelf_code
+                st.write("")
+
+    selected_shelf = st.session_state["selected_shelf"]
+    selected_products = locations.get(selected_shelf, [])
+    st.divider()
+    st.markdown(f"### Shelf details: `{selected_shelf}`")
+    if selected_products:
+        st.dataframe(
+            [{
+                "SKU": p["sku"],
+                "Product": p["name"],
+                "Category": p["category"],
+                "Quantity": p["quantity"],
+                "Reorder level": p["reorder_level"],
+                "Status": "Reorder" if p["quantity"] <= p["reorder_level"] else "In stock"
+            } for p in selected_products],
+            use_container_width=True,
+            hide_index=True
+        )
+        product_options = {
+            f'{p["sku"]} — {p["name"]} (current: {p["quantity"]})': p
+            for p in selected_products
+        }
+        chosen_product_label = st.selectbox("Choose product to adjust stock", list(product_options), key="layout_stock_product")
+        chosen_product = product_options[chosen_product_label]
+        revised_quantity = st.number_input(
+            "New available quantity",
+            min_value=0,
+            value=int(chosen_product["quantity"]),
+            step=1,
+            key=f'layout_stock_qty_{chosen_product["id"]}'
+        )
+        if st.button("Update stock from warehouse layout", type="primary"):
+            update_stock(chosen_product["id"], int(revised_quantity))
+            st.success("Shelf inventory updated.")
+            st.rerun()
+    else:
+        st.info("This shelf is currently empty. Add a product from Inventory and assign this shelf location.")
+        st.write(f"To store a product here, use `{selected_shelf}` as its shelf location in Inventory → Add product.")
+
+    with st.expander("How this layout works"):
+        st.markdown("""
+        - The layout reads product locations directly from the SQLite inventory database.
+        - Green shelves contain products above their reorder levels.
+        - Orange shelves contain at least one product at or below its reorder level.
+        - White shelves have no products assigned.
+        - Selecting a shelf displays its SKUs and lets the operator update stock.
+
+        This is a logical warehouse floor plan for the academic prototype, not a measured architectural blueprint.
+        """)
+
+
+elif page == "Orders":
+    st.subheader("Customer order management")
+    st.caption("Build a shopping cart with multiple products, then place everything as one customer order.")
+    products = get_products()
+    if not products:
+        st.info("Add inventory before creating an order.")
+    else:
+        product_by_id = {int(p["id"]): p for p in products}
+        st.session_state.setdefault("order_cart", {})
+        cart = st.session_state["order_cart"]
+
+        with st.container(border=True):
+            st.markdown("### 1. Customer and delivery details")
+            customer_col, destination_col, priority_col = st.columns([1.4, 1, 1])
+            customer = customer_col.text_input("Customer name", key="multi_order_customer", placeholder="Enter customer name")
+            destination = destination_col.selectbox("Delivery destination", DESTINATIONS, key="multi_order_destination")
+            priority_label = priority_col.selectbox("Order priority", ["Urgent", "High", "Normal", "Low"], index=2, key="multi_order_priority")
+            priority = {"Urgent": 1, "High": 2, "Normal": 3, "Low": 4}[priority_label]
+
+        with st.container(border=True):
+            st.markdown("### 2. Add products to cart")
+            available_products = [p for p in products if int(p["quantity"]) > 0]
+            if available_products:
+                product_options = {
+                    f'{p["name"]} · {p["sku"]} · {p["quantity"]} available': int(p["id"])
+                    for p in available_products
+                }
+                add_col, qty_col, action_col = st.columns([2.2, 0.8, 1])
+                selected_label = add_col.selectbox("Choose product", list(product_options), key="cart_product_choice")
+                selected_id = product_options[selected_label]
+                selected_product = product_by_id[selected_id]
+                add_qty = qty_col.number_input("Quantity", min_value=1, max_value=max(1, int(selected_product["quantity"])), value=1, step=1, key="cart_add_quantity")
+                if action_col.button("＋ Add to cart", use_container_width=True, type="primary"):
+                    new_total = int(cart.get(selected_id, 0)) + int(add_qty)
+                    if new_total > int(selected_product["quantity"]):
+                        st.error(f'Only {selected_product["quantity"]} unit(s) of {selected_product["name"]} are available in stock.')
+                    else:
+                        cart[selected_id] = new_total
+                        st.session_state["order_cart"] = cart
+                        st.rerun()
+            else:
+                st.warning("No products currently have available stock.")
+
+            st.markdown("### 3. Review your cart")
+            if cart:
+                total_units = 0
+                for product_id in list(cart.keys()):
+                    product = product_by_id.get(int(product_id))
+                    if product is None:
+                        cart.pop(product_id, None)
+                        continue
+                    line, qty_box, remove_box = st.columns([2.2, 0.8, 0.8])
+                    line.markdown(f'**{product["name"]}**  \n<small>{product["sku"]} · {product["category"]} · Stock: {product["quantity"]}</small>', unsafe_allow_html=True)
+                    max_qty = max(1, int(product["quantity"]))
+                    current_qty = min(int(cart[product_id]), max_qty)
+                    updated_qty = qty_box.number_input("Units", min_value=1, max_value=max_qty, value=current_qty, step=1, key=f"cart_line_qty_{product_id}")
+                    cart[product_id] = int(updated_qty)
+                    total_units += int(updated_qty)
+                    if remove_box.button("Remove", key=f"cart_remove_{product_id}", use_container_width=True):
+                        cart.pop(product_id, None)
+                        st.session_state["order_cart"] = cart
+                        st.rerun()
+                st.session_state["order_cart"] = cart
+                st.divider()
+                total_products = len(cart)
+                metric_a, metric_b = st.columns(2)
+                metric_a.metric("Different products", total_products)
+                metric_b.metric("Total units", total_units)
+                place_col, clear_col = st.columns([2, 1])
+                if place_col.button("Place complete order", type="primary", use_container_width=True, disabled=not bool(cart)):
+                    try:
+                        if not customer.strip():
+                            st.error("Enter a customer name before placing the order.")
+                        else:
+                            group_id = create_multi_item_order(
+                                customer, destination,
+                                [(int(pid), int(qty)) for pid, qty in cart.items()],
+                                priority
+                            )
+                            st.session_state["order_cart"] = {}
+                            st.success(f"Order {group_id} placed successfully with {total_products} product line(s) and {total_units} total unit(s). Stock has been reserved.")
+                            st.rerun()
+                    except Exception as exc:
+                        st.error(str(exc))
+                if clear_col.button("Clear cart", use_container_width=True):
+                    st.session_state["order_cart"] = {}
+                    st.rerun()
+            else:
+                st.info("Your cart is empty. Add one or more products above.")
 
     st.divider()
-    st.subheader("Reconcile Discrepancy")
-    with st.form("stock_reconcile_form"):
-        sc1, sc2, sc3 = st.columns([4, 3, 3])
-        sku_audit = sc1.selectbox("Select SKU to Reconcile", [f"{p['sku']} - {p['name']}" for p in products_all])
-        target_sku_audit = sku_audit.split(" - ")[0]
-        current_rec = next((p for p in products_all if p["sku"] == target_sku_audit), None)
-        phys_count = sc2.number_input("Physical Count Observed", min_value=0, value=current_rec["quantity"] if current_rec else 0, step=1)
-        submit_reconcile = sc3.form_submit_button("Apply Reconciled Count", width="stretch")
-        if submit_reconcile and current_rec:
-            variance = phys_count - current_rec["quantity"]
-            update_stock(target_sku_audit, variance)
-            st.success(f"Reconciled {target_sku_audit}: System updated to {phys_count} units (Variance: {variance:+d}).")
+    orders = get_orders()
+    st.markdown("**Order items (urgent orders appear first)**")
+    if orders:
+        st.dataframe([{
+            "Order ID": o.get("order_group_id") or f'ORD-{o["id"]:04d}',
+            "Line ID": f'#{o["id"]}', "Customer": o["customer"], "Destination": o["destination"],
+            "Product": o["product_name"], "Qty": o["quantity"],
+            "Priority": {1:"Urgent",2:"High",3:"Normal",4:"Low"}.get(o["priority"], o["priority"]),
+            "Status": o["status"], "Vehicle": o.get("assigned_vehicle") or "Not assigned",
+            "Route (km)": o.get("route_km") if o.get("route_km") is not None else "—"
+        } for o in orders], use_container_width=True, hide_index=True)
+        pending = [o for o in orders if o["status"] in ("Pending", "Processing", "Dispatched")]
+        if pending:
+            order_groups = {}
+            for order in pending:
+                group_id = order.get("order_group_id") or f'ORD-{order["id"]:06d}'
+                order_groups.setdefault(group_id, []).append(order)
+            order_labels = {
+                f'{group_id} — {rows[0]["customer"]} — {len(rows)} product line(s) — {rows[0]["status"]}': group_id
+                for group_id, rows in order_groups.items()
+            }
+            chosen = st.selectbox("Select complete customer order to update", list(order_labels))
+            new_status = st.selectbox("New status", ["Processing", "Dispatched", "Delivered", "Pending"])
+            if st.button("Update complete order status"):
+                update_order_group_status(order_labels[chosen], new_status)
+                st.success("All product lines in this customer order were updated.")
+                st.rerun()
+    else:
+        st.info("No orders yet.")
+
+elif page == "Smart Delivery Assignment":
+    st.subheader("Smart Delivery Assignment")
+    st.caption("Automatically allocate unassigned orders to available vehicles using priority-aware First-Fit Decreasing and Dijkstra route estimates.")
+    orders = get_orders()
+    eligible = [o for o in orders if o["status"] != "Delivered" and not o.get("assigned_vehicle")]
+    assigned_now = [o for o in orders if o.get("assigned_vehicle") and o["status"] != "Delivered"]
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Orders awaiting assignment", len(eligible))
+    c2.metric("Already assigned", len(assigned_now))
+    c3.metric("Delivered orders", sum(o["status"] == "Delivered" for o in orders))
+    st.info("Capacity is measured in **order units** (the quantity field), because this prototype does not yet store physical parcel weight or dimensions. Route distances use the sample road network.")
+    with st.form("smart_assignment_form"):
+        a, b = st.columns(2)
+        vehicle_count = a.number_input("Available vehicles", min_value=1, max_value=30, value=3, step=1)
+        capacity_units = b.number_input("Capacity per vehicle (order units)", min_value=1, max_value=500, value=20, step=1)
+        run_assignment = st.form_submit_button("🚚 Generate smart assignments", type="primary", use_container_width=True)
+    if run_assignment:
+        planned, unassigned = smart_delivery_assignment(
+            eligible, int(vehicle_count), int(capacity_units),
+            lambda zone: dijkstra(GRAPH, "Warehouse", zone)[0]
+        )
+        if planned:
+            save_delivery_assignments({name: data["orders"] for name, data in planned.items()})
+            st.session_state["last_assignment_unassigned"] = unassigned
+            st.success(f"Successfully assigned {sum(len(v['orders']) for v in planned.values())} complete customer order(s) across {len(planned)} vehicle(s).")
             st.rerun()
+        else:
+            st.warning("No orders could be assigned. Check whether unassigned orders exist and vehicle capacity is sufficient.")
+            st.session_state["last_assignment_unassigned"] = unassigned
+    if st.button("Clear active assignments", disabled=not assigned_now):
+        clear_delivery_assignments()
+        st.success("Active assignments cleared. Delivered orders are not changed.")
+        st.rerun()
+    st.markdown("### Current vehicle plan")
+    if assigned_now:
+        by_vehicle = {}
+        for order in assigned_now:
+            by_vehicle.setdefault(order["assigned_vehicle"], []).append(order)
+        for vehicle, vehicle_orders in sorted(by_vehicle.items()):
+            total_load = sum(int(o["quantity"]) for o in vehicle_orders)
+            route_total = sum(float(o["route_km"] or 0) for o in {o.get("order_group_id") or o["id"]: o for o in vehicle_orders}.values())
+            unique_orders = len({o.get("order_group_id") or o["id"] for o in vehicle_orders})
+            with st.expander(f"{vehicle}  ·  {unique_orders} customer order(s)  ·  {total_load} capacity units  ·  {route_total:.1f} route-km", expanded=True):
+                st.dataframe([{
+                    "Order": o.get("order_group_id") or f'ORD-{o["id"]:04d}', "Customer": o["customer"], "Destination": o["destination"],
+                    "Product": o["product_name"], "Units": o["quantity"],
+                    "Priority": {1:"Urgent",2:"High",3:"Normal",4:"Low"}.get(o["priority"], o["priority"]),
+                    "Route estimate (km)": o["route_km"]
+                } for o in vehicle_orders], use_container_width=True, hide_index=True)
+                st.progress(min(total_load / max(int(capacity_units), 1), 1.0), text=f"Illustrative capacity utilisation: {total_load} / {int(capacity_units)} units")
+    else:
+        st.info("No active vehicle assignments yet. Generate assignments above after placing customer orders.")
+    unassigned = st.session_state.get("last_assignment_unassigned", [])
+    if unassigned:
+        st.markdown("### Orders not assigned")
+        st.dataframe([{"Order ID": o.get("order_group_id") or o["id"], "Customer": o["customer"], "Units": o["quantity"], "Reason": o["reason"]} for o in unassigned], use_container_width=True, hide_index=True)
+    with st.expander("How the assignment algorithm works"):
+        st.markdown("""
+        1. Ignore delivered orders and orders that already have a vehicle.
+        2. Sort remaining orders by urgency (Urgent → High → Normal → Low), then larger loads first.
+        3. Place each order in the first vehicle with enough remaining capacity (First-Fit Decreasing-style heuristic).
+        4. Calculate each assigned order's warehouse-to-destination shortest distance using Dijkstra.
+        5. Save the vehicle, route estimate and assignment timestamp in SQLite.
 
+        This is a practical heuristic for the academic prototype; it is not a global optimum and does not model traffic, service times or multi-stop road sequencing.
+        """)
 
-# =========================================================
-# VIEW 6: ADMIN ("Reports, Settings & Dispatch Optimization")
-# =========================================================
-elif st.session_state["active_nav"] == "Admin":
-    st.html("""
-    <div>
-        <div class="page-header-title">Reports, Dispatch & Settings</div>
-        <div class="page-header-sub">Algorithmic knapsack vehicle loading, fleet bin-packing, demand forecasting and system setup</div>
-    </div>
+elif page == "Advanced Analytics":
+    st.subheader("Advanced Analytics")
+    st.caption("Explore warehouse health, order fulfilment, demand patterns and delivery workload using your local SQLite data.")
+    stats = dashboard_stats()
+    analytics = analytics_summary()
+    products = get_products()
+    orders = get_orders()
+    delivered_rate = analytics["delivered_rate"]
+    pending_count = sum(o["status"] == "Pending" for o in orders)
+    processing_count = sum(o["status"] in ("Processing", "Dispatched") for o in orders)
+    total_value_units = sum(int(p["quantity"]) for p in products)
+    m = st.columns(5)
+    m[0].metric("Total orders", analytics["total_orders"])
+    m[1].metric("Delivery completion", f"{delivered_rate}%")
+    m[2].metric("Pending", pending_count)
+    m[3].metric("Assigned active", analytics["assigned"])
+    m[4].metric("Inventory units", total_value_units)
+    tab1, tab2, tab3 = st.tabs(["📈 Order performance", "📦 Inventory intelligence", "🧭 Delivery insights"])
+    with tab1:
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**Orders by status**")
+            status_data = [{"Status": r["status"], "Orders": r["total"]} for r in analytics["status"]]
+            if status_data:
+                st.bar_chart(status_data, x="Status", y="Orders", use_container_width=True)
+            else:
+                st.info("No order data yet.")
+        with right:
+            st.markdown("**Orders by priority**")
+            priority_names = {1:"Urgent",2:"High",3:"Normal",4:"Low"}
+            priority_data = [{"Priority": priority_names.get(r["priority"], str(r["priority"])), "Orders": r["total"]} for r in analytics["priority"]]
+            if priority_data:
+                st.bar_chart(priority_data, x="Priority", y="Orders", use_container_width=True)
+            else:
+                st.info("Priority analysis will appear after orders are created.")
+        st.markdown("**Daily order creation trend**")
+        if analytics["daily"]:
+            st.line_chart([{"Date": r["day"], "Orders": r["orders"]} for r in analytics["daily"]], x="Date", y="Orders", use_container_width=True)
+        else:
+            st.info("No daily trend available yet.")
+        st.dataframe([{"Status": r["status"], "Order count": r["total"]} for r in analytics["status"]], use_container_width=True, hide_index=True)
+    with tab2:
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**Available units by category**")
+            if analytics["category"]:
+                st.bar_chart([{"Category": r["category"], "Units": r["units"] or 0} for r in analytics["category"]], x="Category", y="Units", use_container_width=True)
+            else:
+                st.info("No inventory data available.")
+        with right:
+            st.markdown("**Stock health**")
+            low_items = [p for p in products if p["quantity"] <= p["reorder_level"]]
+            healthy_items = [p for p in products if p["quantity"] > p["reorder_level"]]
+            st.metric("Healthy SKUs", len(healthy_items))
+            st.metric("Reorder alerts", len(low_items))
+            st.metric("Total SKUs", len(products))
+        if low_items:
+            st.warning("Items at or below reorder level")
+            st.dataframe([{"SKU": p["sku"], "Product": p["name"], "Stock": p["quantity"], "Reorder at": p["reorder_level"], "Shelf": p["location"], "Shortfall": max(0, p["reorder_level"]-p["quantity"])} for p in low_items], use_container_width=True, hide_index=True)
+        else:
+            st.success("No products currently need replenishment.")
+        st.markdown("**Inventory register**")
+        st.dataframe([{"SKU": p["sku"], "Product": p["name"], "Category": p["category"], "Available units": p["quantity"], "Reorder level": p["reorder_level"], "Location": p["location"]} for p in products], use_container_width=True, hide_index=True)
+    with tab3:
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**Orders by destination**")
+            if analytics["destination"]:
+                st.bar_chart([{"Destination": r["destination"], "Orders": r["total"]} for r in analytics["destination"]], x="Destination", y="Orders", use_container_width=True)
+            else:
+                st.info("Destination analysis will appear after orders are placed.")
+        with right:
+            st.markdown("**Dispatch coverage**")
+            active_orders = [o for o in orders if o["status"] != "Delivered"]
+            assigned_orders = [o for o in active_orders if o.get("assigned_vehicle")]
+            coverage = round(len(assigned_orders) / len(active_orders) * 100, 1) if active_orders else 0
+            st.metric("Active orders with a vehicle", f"{coverage}%")
+            st.metric("Active unassigned orders", len(active_orders)-len(assigned_orders))
+            st.metric("Unique vehicles in use", len({o["assigned_vehicle"] for o in assigned_orders}))
+        if assigned_orders:
+            st.markdown("**Vehicle workload**")
+            vehicle_loads = {}
+            for order in assigned_orders:
+                vehicle_loads[order["assigned_vehicle"]] = vehicle_loads.get(order["assigned_vehicle"], 0) + int(order["quantity"])
+            st.bar_chart([{"Vehicle": v, "Order units": units} for v, units in sorted(vehicle_loads.items())], x="Vehicle", y="Order units", use_container_width=True)
+        st.caption("Analytics are calculated from orders and inventory stored in your local SQLite database. Route distances and capacity units are prototype estimates.")
+
+elif page == "Delivery Optimizer":
+    st.subheader("Dijkstra shortest-route visualizer")
+    st.caption("Step through the min-heap algorithm and watch tentative distances change across the delivery network.")
+    destination = st.selectbox("Choose customer destination", DESTINATIONS, key="route_destination")
+    trace, path, distance = trace_dijkstra(GRAPH, "Warehouse", destination)
+
+    if st.session_state.get("trace_destination") != destination:
+        st.session_state["trace_destination"] = destination
+        st.session_state["route_step"] = 0
+
+    max_step = len(trace) - 1
+    if "route_step" not in st.session_state:
+        st.session_state["route_step"] = 0
+    st.session_state["route_step"] = min(st.session_state["route_step"], max_step)
+
+    control_a, control_b, control_c, control_d = st.columns([1, 1, 1, 2])
+    if control_a.button("⏮ Reset", use_container_width=True):
+        st.session_state["route_step"] = 0
+    if control_b.button("◀ Previous", disabled=st.session_state["route_step"] == 0, use_container_width=True):
+        st.session_state["route_step"] -= 1
+    if control_c.button("Next ▶", disabled=st.session_state["route_step"] >= max_step, use_container_width=True):
+        st.session_state["route_step"] += 1
+    control_d.caption("Use Next to animate one algorithm event at a time.")
+
+    step_index = st.slider("Animation step", min_value=0, max_value=max_step, key="route_step")
+    snapshot = trace[step_index]
+    st.progress((step_index + 1) / len(trace), text=f"Step {step_index + 1} of {len(trace)}")
+    st.info(snapshot["message"])
+    st.markdown(draw_route_graph(GRAPH, EDGES, snapshot, "Warehouse", destination, path if step_index == max_step else []), unsafe_allow_html=True)
+
+    metric1, metric2, metric3 = st.columns(3)
+    metric1.metric("Best known distance", "∞" if snapshot["distances"][destination] == float("inf") else f'{snapshot["distances"][destination]} km')
+    metric2.metric("Visited locations", len(snapshot["visited"]))
+    metric3.metric("Algorithm events", len(trace) - 1)
+
+    with st.expander("Tentative distances at this step", expanded=True):
+        distance_rows = [{"Location": node, "Tentative distance": "∞" if value == float("inf") else f"{value} km", "Status": "Visited" if node in snapshot["visited"] else ("Currently processing" if node == snapshot["current"] else "Unvisited")} for node, value in snapshot["distances"].items()]
+        st.dataframe(distance_rows, use_container_width=True, hide_index=True)
+
+    if step_index == max_step and path:
+        st.success(f"Shortest route: {' → '.join(path)} | Total distance: {distance} km")
+    elif path:
+        st.caption("Green edges show the final shortest path for reference; orange highlights the edge being examined in the current step.")
+    st.markdown("**Network connections and edge weights (km)**")
+    st.dataframe([{"From":a,"To":b,"Distance (km)":w} for a,b,w in EDGES], use_container_width=True, hide_index=True)
+    st.caption("All distances are illustrative sample data, not live GPS or road traffic measurements.")
+
+elif page == "DSA Demonstration":
+    st.subheader("DSA algorithms in this project")
+    st.markdown("""
+    **1. Hash Map / Dictionary — Inventory lookup**  
+    Product records are retrieved by their unique database ID or SKU search index. Average hash lookup complexity is **O(1)**.
+
+    **2. Priority Queue / Min-Heap — Order scheduling**  
+    Urgent orders are assigned smaller priority numbers. Heap insertion and removal take **O(log n)**; viewing the next order is **O(1)**.
+
+    **3. Graph + Dijkstra — Delivery route optimization**  
+    Locations are vertices and roads are weighted edges. With an adjacency list and binary heap, complexity is **O((V + E) log V)**.
+
+    **4. Greedy picking — Shelf ordering**  
+    Requested products are sorted by aisle/shelf location to create an easy picking sequence. Sorting takes **O(n log n)**.
+
+    **5. First-Fit Decreasing + priority sorting — Smart delivery assignment**  
+    Orders are sorted by urgency and load, then fitted into vehicles with available capacity. This is a heuristic, not a guaranteed optimal packing solution. Each order's route estimate is calculated using Dijkstra.
+
+    **6. SQL Aggregation — Advanced analytics**  
+    SQLite `GROUP BY`, `SUM`, `COUNT` and date grouping produce order, inventory and dispatch summaries without requiring Pandas or NumPy.
     """)
-
-    adm_tab1, adm_tab2, adm_tab3, adm_tab4 = st.tabs([
-        "Demand Forecasting", "Vehicle Loading (Knapsack)", "Fleet Assignment", "System Settings"
-    ])
-
-    with adm_tab1:
-        st.subheader("Demand Forecasting (Moving-Average Baseline)")
-        f_sales = st.text_input("Historical Daily Sales (Comma-separated)", "18, 22, 19, 25, 28, 24, 31, 35")
-        f_horizon = st.slider("Days to Forecast Ahead", min_value=1, max_value=14, value=5)
-        if st.button("Generate Forecast", icon=":material/trending_up:"):
-            try:
-                hist = [float(x.strip()) for x in f_sales.split(",") if x.strip()]
-                preds = forecast_demand(hist, horizon=f_horizon)
-                
-                chart_df = pd.DataFrame({
-                    "Period": [f"Day -{len(hist)-i}" for i in range(len(hist))] + [f"Forecast +{i+1}" for i in range(len(preds))],
-                    "Sales": hist + [round(x, 1) for x in preds],
-                    "Type": ["Historical"] * len(hist) + ["Forecast"] * len(preds)
-                })
-                st.bar_chart(chart_df, x="Period", y="Sales", color="Type", width="stretch")
-                st.caption(f"Forecasted values: {[round(x, 1) for x in preds]}")
-            except Exception as e:
-                st.error(f"Forecast error: {e}")
-
-    with adm_tab2:
-        st.subheader("Vehicle Load Optimization (Exact 0/1 Knapsack DP)")
-        st.caption("Select packages that maximize total priority value while strictly respecting vehicle payload capacity.")
-        pkg_input = st.text_area("Packages (Format: Name, Weight_KG, Value)",
-                                 "Order-101, 6.5, 140\nOrder-102, 12.0, 260\nOrder-103, 4.0, 95\nOrder-104, 15.0, 310\nOrder-105, 8.5, 180")
-        truck_cap = st.number_input("Vehicle Weight Capacity (KG)", min_value=5.0, value=25.0, step=1.0)
-        if st.button("Optimize Vehicle Load", icon=":material/local_shipping:"):
-            try:
-                items_list = []
-                for line in pkg_input.splitlines():
-                    if line.strip():
-                        n, w, v = [x.strip() for x in line.split(",")]
-                        items_list.append({"name": n, "weight": float(w), "value": float(v)})
-                chosen_pkgs, loaded_w, total_val = pack_orders(items_list, float(truck_cap))
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Selected Packages", len(chosen_pkgs))
-                m2.metric("Total Loaded Weight", f"{loaded_w:.1f} kg / {truck_cap:.1f} kg")
-                m3.metric("Total Priority Value", f"${total_val:.1f}")
-                st.dataframe(pd.DataFrame(chosen_pkgs), width="stretch", hide_index=True)
-            except Exception as e:
-                st.error(f"Knapsack optimizer error: {e}")
-
-    with adm_tab3:
-        st.subheader("Fleet Vehicle Assignment (First-Fit Decreasing Bin Packing)")
-        st.caption("Distribute customer loads across available delivery fleet vehicles.")
-        cust_loads = st.text_input("Customer Shipment Loads (KG, comma-separated)", "18, 25, 12, 35, 20, 15")
-        fleet_caps = st.text_input("Vehicle Capacities (KG, comma-separated)", "60, 45, 30")
-        if st.button("Assign Fleet", icon=":material/rv_hookup:"):
-            try:
-                loads = [float(x.strip()) for x in cust_loads.split(",") if x.strip()]
-                caps = [float(x.strip()) for x in fleet_caps.split(",") if x.strip()]
-                fleet_res = assign_vehicles(loads, caps)
-                for v in fleet_res:
-                    st.write(f"🚚 **Vehicle {v['vehicle']}** (Capacity: {v['capacity']} kg &bull; Remaining: {v['remaining']} kg)")
-                    if v["customers"]:
-                        st.dataframe(pd.DataFrame(v["customers"]), width="stretch", hide_index=True)
-                    else:
-                        st.info("Empty vehicle (no loads assigned).")
-            except Exception as e:
-                st.error(f"Fleet assignment error: {e}")
-
-    with adm_tab4:
-        st.subheader("Database & Demo Controls")
-        st.write("Reset database and seed realistic demo products and orders to match the PickFlow Pro UI.")
-        if st.button("Seed / Reset Demo Warehouse Data", icon=":material/restart_alt:"):
-            seed_demo_data(force=True)
-            st.success("Database re-seeded with realistic warehouse items and orders!")
-            st.rerun()
+    orders = [o for o in get_orders() if o["status"] == "Pending"]
+    if orders:
+        st.markdown("**Priority queue output (pending orders)**")
+        ordered = prioritize_orders(orders)
+        st.dataframe([{"Order ID":o["id"],"Customer":o["customer"],"Priority":o["priority"],"Product":o["product_name"]} for o in ordered], use_container_width=True, hide_index=True)
+    products = get_products()
+    if products:
+        st.markdown("**Greedy shelf-picking sequence (sample: all products)**")
+        plan = greedy_pick_plan(products)
+        st.write(" → ".join(f'{p["location"]} ({p["name"]})' for p in plan))
+    st.markdown("**Vehicle allocation example**")
+    sample_deliveries = [{"order":"ORD-1","weight":8},{"order":"ORD-2","weight":5},{"order":"ORD-3","weight":4},{"order":"ORD-4","weight":3}]
+    capacity = st.number_input("Vehicle capacity (kg)", min_value=5, max_value=100, value=10)
+    groups = greedy_vehicle_assignment(sample_deliveries, float(capacity))
+    for i, group in enumerate(groups, 1):
+        st.write(f"Vehicle {i}: " + ", ".join(f'{d["order"]} ({d["weight"]} kg)' for d in group))
+        st.caption(f"Total load: {sum(d['weight'] for d in group)} kg")
