@@ -324,9 +324,21 @@ def draw_route_graph(graph, edges, snapshot, start, destination, final_path):
 st.markdown('<div class="hero"><h1>📦 Smart Warehouse & Delivery Suite</h1><p>Intelligent inventory control · Priority-aware dispatch · Shortest-path routing · Operational analytics</p></div>', unsafe_allow_html=True)
 with st.sidebar:
     st.markdown("## WAREHOUSE OPS")
-    page = st.radio("WORKSPACE", ["Dashboard", "Inventory", "Warehouse Layout", "Orders", "Smart Delivery Assignment", "Delivery Optimizer", "Advanced Analytics", "DSA Demonstration"])
+    st.markdown("### WORKSPACE")
+    page = st.radio(
+        "Navigate",
+        [
+            "Dashboard",
+            "Inventory",
+            "Warehouse Layout",
+            "Orders",
+            "Smart Delivery Assignment",
+            "Delivery Optimizer",
+            "Advanced Analytics",
+        ],
+        label_visibility="collapsed",
+    )
     st.divider()
-    st.caption("M.Tech DSA Project · Python 3.11")
 
 if page == "Dashboard":
     st.subheader("Operations overview")
@@ -831,42 +843,3 @@ elif page == "Delivery Optimizer":
     st.markdown("**Network connections and edge weights (km)**")
     st.dataframe([{"From":a,"To":b,"Distance (km)":w} for a,b,w in EDGES], width="stretch", hide_index=True)
     st.caption("All distances are illustrative sample data, not live GPS or road traffic measurements.")
-
-elif page == "DSA Demonstration":
-    st.subheader("DSA algorithms in this project")
-    st.markdown("""
-    **1. Hash Map / Dictionary — Inventory lookup**  
-    Product records are retrieved by their unique database ID or SKU search index. Average hash lookup complexity is **O(1)**.
-
-    **2. Priority Queue / Min-Heap — Order scheduling**  
-    Urgent orders are assigned smaller priority numbers. Heap insertion and removal take **O(log n)**; viewing the next order is **O(1)**.
-
-    **3. Graph + Dijkstra — Delivery route optimization**  
-    Locations are vertices and roads are weighted edges. With an adjacency list and binary heap, complexity is **O((V + E) log V)**.
-
-    **4. Greedy picking — Shelf ordering**  
-    Requested products are sorted by aisle/shelf location to create an easy picking sequence. Sorting takes **O(n log n)**.
-
-    **5. First-Fit Decreasing + priority sorting — Smart delivery assignment**  
-    Orders are sorted by urgency and load, then fitted into vehicles with available capacity. This is a heuristic, not a guaranteed optimal packing solution. Each order's route estimate is calculated using Dijkstra.
-
-    **6. SQL Aggregation — Advanced analytics**  
-    SQLite `GROUP BY`, `SUM`, `COUNT` and date grouping produce order, inventory and dispatch summaries without requiring Pandas or NumPy.
-    """)
-    orders = [o for o in get_orders() if o["status"] == "Pending"]
-    if orders:
-        st.markdown("**Priority queue output (pending orders)**")
-        ordered = prioritize_orders(orders)
-        st.dataframe([{"Order ID":o["id"],"Customer":o["customer"],"Priority":o["priority"],"Product":o["product_name"]} for o in ordered], width="stretch", hide_index=True)
-    products = get_products()
-    if products:
-        st.markdown("**Greedy shelf-picking sequence (sample: all products)**")
-        plan = greedy_pick_plan(products)
-        st.write(" → ".join(f'{p["location"]} ({p["name"]})' for p in plan))
-    st.markdown("**Vehicle allocation example**")
-    sample_deliveries = [{"order":"ORD-1","weight":8},{"order":"ORD-2","weight":5},{"order":"ORD-3","weight":4},{"order":"ORD-4","weight":3}]
-    capacity = st.number_input("Vehicle capacity (kg)", min_value=5, max_value=100, value=10)
-    groups = greedy_vehicle_assignment(sample_deliveries, float(capacity))
-    for i, group in enumerate(groups, 1):
-        st.write(f"Vehicle {i}: " + ", ".join(f'{d["order"]} ({d["weight"]} kg)' for d in group))
-        st.caption(f"Total load: {sum(d['weight'] for d in group)} kg")
