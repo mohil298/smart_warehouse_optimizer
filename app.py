@@ -342,6 +342,10 @@ with st.sidebar:
 
 if page == "Dashboard":
     st.subheader("Operations overview")
+<<<<<<< HEAD
+=======
+    st.caption("A live snapshot of stock health, order flow and fulfilment activity.")
+>>>>>>> 8de2414d12e63b81c76fbb985afa2630847f3eab
     stats = dashboard_stats()
     cols = st.columns(5)
     labels = [("Products", stats["products"]), ("Units in stock", stats["units"]),
@@ -374,6 +378,7 @@ elif page == "Inventory":
             category = c1.selectbox("Category", ["Electronics","Stationery","Lifestyle","Home","Other"])
             quantity = c2.number_input("Initial quantity", min_value=0, value=10, step=1)
             reorder = c1.number_input("Reorder level", min_value=0, value=5, step=1)
+<<<<<<< HEAD
             existing_locations = {
                 str(product.get("location", "")).strip().upper()
                 for product in get_products()
@@ -391,6 +396,9 @@ elif page == "Inventory":
                 shelf_options,
                 index=shelf_options.index(default_shelf)
             )
+=======
+            location = c2.text_input("Shelf location", placeholder="A-03")
+>>>>>>> 8de2414d12e63b81c76fbb985afa2630847f3eab
             submitted = st.form_submit_button("Add product")
             if submitted:
                 try:
@@ -424,6 +432,10 @@ elif page == "Inventory":
 
 elif page == "Warehouse Layout":
     st.subheader("Interactive warehouse floor layout")
+<<<<<<< HEAD
+=======
+    st.caption("Select a shelf to inspect the products stored there. Shelf indicators are calculated from live inventory records.")
+>>>>>>> 8de2414d12e63b81c76fbb985afa2630847f3eab
 
     products = get_products()
 
@@ -463,6 +475,10 @@ elif page == "Warehouse Layout":
         st.session_state["selected_shelf"] = "A-01"
 
     st.markdown("### Floor plan")
+<<<<<<< HEAD
+=======
+    st.caption("Aisles are shown as columns. Select any shelf card to view its inventory.")
+>>>>>>> 8de2414d12e63b81c76fbb985afa2630847f3eab
     aisle_columns = st.columns(len(aisle_names))
     for aisle_index, aisle in enumerate(aisle_names):
         with aisle_columns[aisle_index]:
@@ -537,6 +553,10 @@ elif page == "Warehouse Layout":
 
 elif page == "Orders":
     st.subheader("Customer order management")
+<<<<<<< HEAD
+=======
+    st.caption("Build a shopping cart with multiple products, then place everything as one customer order.")
+>>>>>>> 8de2414d12e63b81c76fbb985afa2630847f3eab
     products = get_products()
     if not products:
         st.info("Add inventory before creating an order.")
@@ -657,6 +677,10 @@ elif page == "Orders":
 
 elif page == "Smart Delivery Assignment":
     st.subheader("Smart Delivery Assignment")
+<<<<<<< HEAD
+=======
+    st.caption("Automatically allocate unassigned orders to available vehicles using priority-aware First-Fit Decreasing and Dijkstra route estimates.")
+>>>>>>> 8de2414d12e63b81c76fbb985afa2630847f3eab
     orders = get_orders()
     eligible = [o for o in orders if o["status"] != "Delivered" and not o.get("assigned_vehicle")]
     assigned_now = [o for o in orders if o.get("assigned_vehicle") and o["status"] != "Delivered"]
@@ -723,6 +747,10 @@ elif page == "Smart Delivery Assignment":
 
 elif page == "Advanced Analytics":
     st.subheader("Advanced Analytics")
+<<<<<<< HEAD
+=======
+    st.caption("Explore warehouse health, order fulfilment, demand patterns and delivery workload using your local SQLite data.")
+>>>>>>> 8de2414d12e63b81c76fbb985afa2630847f3eab
     stats = dashboard_stats()
     analytics = analytics_summary()
     products = get_products()
@@ -805,9 +833,17 @@ elif page == "Advanced Analytics":
             for order in assigned_orders:
                 vehicle_loads[order["assigned_vehicle"]] = vehicle_loads.get(order["assigned_vehicle"], 0) + int(order["quantity"])
             st.bar_chart([{"Vehicle": v, "Order units": units} for v, units in sorted(vehicle_loads.items())], x="Vehicle", y="Order units", width="stretch")
+<<<<<<< HEAD
 
 elif page == "Delivery Optimizer":
     st.subheader("Dijkstra shortest-route visualizer")
+=======
+        st.caption("Analytics are calculated from orders and inventory stored in your local SQLite database. Route distances and capacity units are prototype estimates.")
+
+elif page == "Delivery Optimizer":
+    st.subheader("Dijkstra shortest-route visualizer")
+    st.caption("Step through the min-heap algorithm and watch tentative distances change across the delivery network.")
+>>>>>>> 8de2414d12e63b81c76fbb985afa2630847f3eab
     destination = st.selectbox("Choose customer destination", DESTINATIONS, key="route_destination")
     trace, path, distance = trace_dijkstra(GRAPH, "Warehouse", destination)
 
@@ -827,6 +863,10 @@ elif page == "Delivery Optimizer":
         st.session_state["route_step"] -= 1
     if control_c.button("Next ▶", disabled=st.session_state["route_step"] >= max_step, width="stretch"):
         st.session_state["route_step"] += 1
+<<<<<<< HEAD
+=======
+    control_d.caption("Use Next to animate one algorithm event at a time.")
+>>>>>>> 8de2414d12e63b81c76fbb985afa2630847f3eab
 
     step_index = st.slider("Animation step", min_value=0, max_value=max_step, key="route_step")
     snapshot = trace[step_index]
@@ -845,5 +885,13 @@ elif page == "Delivery Optimizer":
 
     if step_index == max_step and path:
         st.success(f"Shortest route: {' → '.join(path)} | Total distance: {distance} km")
+<<<<<<< HEAD
     st.markdown("**Network connections and edge weights (km)**")
     st.dataframe([{"From":a,"To":b,"Distance (km)":w} for a,b,w in EDGES], width="stretch", hide_index=True)
+=======
+    elif path:
+        st.caption("Green edges show the final shortest path for reference; orange highlights the edge being examined in the current step.")
+    st.markdown("**Network connections and edge weights (km)**")
+    st.dataframe([{"From":a,"To":b,"Distance (km)":w} for a,b,w in EDGES], width="stretch", hide_index=True)
+    st.caption("All distances are illustrative sample data, not live GPS or road traffic measurements.")
+>>>>>>> 8de2414d12e63b81c76fbb985afa2630847f3eab
